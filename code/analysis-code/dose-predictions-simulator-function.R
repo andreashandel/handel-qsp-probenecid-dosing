@@ -6,10 +6,10 @@
 # it needs: deSolve (since it calls the simulator function), dplyr, caTools
 #############################################################################
 
-simulate_dose_predictions <- function(bestfit) {
-  # load model simulator
-  source(here("code/analysis-code/model-simulator-function.R"))
+# load model simulator function
+source(here("code/analysis-code/model-simulator-function.R"))
 
+simulate_dose_predictions <- function(bestfit) {
   # doses for which time-series is saved
   ts_doses <- c(1, 10, 100)
 
@@ -17,12 +17,6 @@ simulate_dose_predictions <- function(bestfit) {
   tfinal <- 7
   dt <- 0.01
   doses <- sort(unique(c(0, ts_doses, 10^seq(-3, 3, length = 20)))) #making sure we include ts_doses
-
-  # ---------------------------------------------------------------------------
-  # 1.  DATA & MODEL -----------------------------------------------------------
-  # ---------------------------------------------------------------------------
-
-  #browser()
 
   params <- bestfit$solution
   names(params) <- bestfit$fitparnames
@@ -51,11 +45,9 @@ simulate_dose_predictions <- function(bestfit) {
     txend,
     txinterval,
     schedule_name,
-    ts_doses, # which doses to save/plot
-    do_plot = FALSE
+    ts_doses
   ) {
-    # logical flag
-
+    # initialize summary data frame
     summary_df <- tibble(
       Dose = doses,
       AUCV = NA_real_,
@@ -71,7 +63,7 @@ simulate_dose_predictions <- function(bestfit) {
         Y0,
         params,
         fixedpars,
-        Ad0 = doses[i] / 50,
+        Ad0 = doses[i] / 50, # divide by body weight scaling to get actual dose
         txstart = txstart,
         txinterval = txinterval,
         txend = txend,
@@ -89,17 +81,18 @@ simulate_dose_predictions <- function(bestfit) {
       ode_df <- as.data.frame(odeout)
 
       # ---- AUCs --------------------------------------------------------------
-      summary_df$AUCV[i] <- trapz(ode_df$time, log10(pmax(1, ode_df$V)))
-      summary_df$AUCF[i] <- trapz(ode_df$time, ode_df$F)
-      summary_df$AUCS[i] <- trapz(ode_df$time, ode_df$S)
+      summary_df$AUCV[i] <- caTools::trapz(
+        ode_df$time,
+        log10(pmax(1, ode_df$V))
+      )
+      summary_df$AUCF[i] <- caTools::trapz(ode_df$time, ode_df$F)
+      summary_df$AUCS[i] <- caTools::trapz(ode_df$time, ode_df$S)
 
-      traj_df <- mutate(ode_df, Dose = doses[i], Schedule = schedule_name)
-
-      # ---- plot every dose ---------------------------------------------------
-      if (do_plot) {
-        p <- plot_timeseries(data = NULL, modelfit = traj_df)
-        print(p)
-      }
+      traj_df <- dplyr::mutate(
+        ode_df,
+        Dose = doses[i],
+        Schedule = schedule_name
+      )
 
       # ---- store time-series only for selected doses -------------------------
       if (doses[i] %in% ts_doses) {
@@ -107,21 +100,24 @@ simulate_dose_predictions <- function(bestfit) {
       }
     }
 
-    list(
+    ret_list <- list(
       summary = summary_df,
       timeseries = if (length(ts_store)) bind_rows(ts_store) else tibble()
     )
+
+    return(ret_list)
   }
 
   #############################################################################
   # 3.  RUN ALL SCHEDULES ------------------------------------------------------
+  # each schedule is a different treatment regimen shown in the main text
   #############################################################################
   schedule_defs <- list(
-    s1 = list(txstart = 1, txend = 4, txinterval = 0.5, name = "s1"),
-    s2 = list(txstart = 2, txend = 5, txinterval = 0.5, name = "s2"),
-    s3 = list(txstart = 3, txend = 6, txinterval = 0.5, name = "s3"),
-    s4 = list(txstart = 1, txend = 4, txinterval = 1, name = "s4"),
-    s5 = list(txstart = 1, txend = 1, txinterval = 1, name = "s5")
+    s1 = list(txstart = 1, txend = 4, txinterval = 0.5, name = "s1"), # baseline, as done in experiment
+    s2 = list(txstart = 2, txend = 5, txinterval = 0.5, name = "s2"), # treatment start at day 2
+    s3 = list(txstart = 3, txend = 6, txinterval = 0.5, name = "s3"), # treatment start at day 3
+    s4 = list(txstart = 1, txend = 4, txinterval = 1, name = "s4"), # daily dosing
+    s5 = list(txstart = 1, txend = 1, txinterval = 1, name = "s5") # single dosing
   )
 
   all_results <- lapply(
@@ -133,8 +129,7 @@ simulate_dose_predictions <- function(bestfit) {
         s$txend,
         s$txinterval,
         s$name,
-        ts_doses,
-        do_plot
+        ts_doses
       )
     }
   )

@@ -1,0 +1,327 @@
+---
+title: |
+  Exploring the effect of different dosing regimens of probenecid on influenza A infections with a quantitative systems pharmacology model 
+format:
+  docx:
+    toc: false
+    number-sections: false
+bibliography: 
+  - ../../assets/probenecid-modeling.bib
+csl: "../../assets/aje.csl"
+execute: 
+  echo: false
+  message: false
+  warning: false
+lang: en-US
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message = FALSE,
+  error = FALSE,
+  knitr.graphics.error = FALSE
+)
+library(yaml, include.only = NULL)
+library(knitr, include.only = NULL)
+library(here)
+```
+
+
+
+# Authors
+
+* Andreas Handel$^{1, 2, \dagger}$ (0000-0002-4622-1146);
+* Jonathan P. Mochel$^{3}$ (0000-0002-0997-3111);
+* Jackelyn Murray$^{4}$; 
+* David E. Martin$^{5}$ (0000-0003-2820-5983);
+* Ralph A. Tripp$^{4,5}$ (0000-0002-2924-9956);
+
+
+# Author affiliations
+
+1. Department of Epidemiology and Biostatistics, University of Georgia, Athens, GA, USA.
+2. Center for the Ecology of Infectious Diseases, University of Georgia, Athens, GA, USA.
+3. Precision One Health Initiative, Department of Pathology, University of Georgia College of Veterinary Medicine, 30602 Athens, GA, USA.
+4. Animal Health Research Center, Department of Infectious Diseases, College of Veterinary Medicine Athens, University of Georgia, Athens, GA 30605, USA 
+5. TrippBio, Inc., Jacksonville, FL 32256, USA
+
+$\dagger$ Corresponding author: ahandel@uga.edu.
+
+
+{{< pagebreak >}}
+
+
+
+
+
+# Abstract
+
+**Background:** Probenecid is a uricosuric agent commonly used for the treatment of gout. Recent studies have demonstrated its potent antiviral and anti-inflammatory properties. A promising indication for probenecid is the treatment of influenza A virus infections. To support future clinical development, rational dose selection must be conducted to identify the most effective regimen prior to human trials. In the present study, a quantitative systems pharmacology (QSP) model was developed to explore different probenecid dosing strategies and to assess their efficacy in reducing viral loads and morbidity in mice infected with influenza A virus.
+
+**Methods:** A QSP model was built by coupling a two-compartment pharmacokinetic (PK) module for probenecid with pharmacodynamic (PD) effects on viral replication and innate immune activation. This PK/PD framework was embedded within a previously established within-host model of influenza A (H5N1) infection. The model was calibrated using published data from murine studies, including measurements of viral load, interleukin-6 (IL-6), and weight-loss morbidity across three dosing regimens. The calibrated model was then used to simulate a range of dosing scenarios varying the total dose, dosing frequency, and timing of treatment initiation.
+
+**Results:** The model was calibrated to reproduce the observed kinetics of virus replication, cytokine induction, and morbidity. A highly nonlinear dose–response relationship was observed. At the administered doses of 10 and 100 mg/kg (twice daily for 3 days), reductions in total viral load (area under the curve, AUC) of approximately 50% and 80%, respectively, were predicted. Reductions in IL-6 AUC and weight-loss AUC of approximately 70% were observed for both doses, with marginal additional benefit above 1 mg/kg. In contrast, for viral load, a plateau in dose responsiveness was not observed until approximately 1,000 mg/kg. Delays in treatment initiation to day 2 or 3 post-infection were predicted to markedly reduce efficacy, and increased dosing was not able to fully compensate for the delay. By contrast, reduced dosing frequency was associated with a more modest loss of efficacy. Once-daily dosing produced only a minor reduction in effect compared to twice-daily dosing, and even a single dose administered on day 1 resulted in a measurable therapeutic effect, which could be enhanced through dose escalation.
+
+**Conclusions:** The QSP model predicted that (i) the timing of treatment initiation is the primary determinant of probenecid efficacy, (ii) once-daily dosing regimens may be feasible with minimal compromise in antiviral or anti-inflammatory effect, and (iii) delayed treatment (≥48 hours post-infection) is unlikely to be rescued by dose escalation. Although the model was developed based on murine data and may require further validation in more biologically relevant models such as ferrets, it does shed insights into the optimization of probenecid dosing for influenza A and may inform future translational and clinical studies.
+
+
+**Keywords:** influenza, probenecid, QSP modeling
+
+
+
+
+{{< pagebreak >}}
+
+# Introduction 
+
+
+
+Infectious diseases such as influenza, COVID-19, and other respiratory viruses continue to pose a significant public health burden [@maleki2023]. Despite the availability of vaccines and therapeutic agents, ongoing viral evolution necessitates continuous monitoring and innovation in antiviral treatment strategies [@bonomini2025; @hussain2025]. 
+
+Resistance to multiple classes of antivirals has been reported for influenza viruses, and the limited efficacy of current treatments highlights the urgent need for novel antiviral strategies. Emerging pandemic threats posed by strains such as H5N1 or H7N9 further underscore the importance of establishing a broad range of antiviral agents.
+
+The development of new antiviral drugs is costly, complex and time-consuming [@brown2022]. Repurposing existing drugs provides an opportunity for identifying effective antiviral treatments more rapidly [@saranraj2025]. Probenecid, a pharmaceutical agent initially approved in 1951 for its uricosuric properties in the treatment of gout, has garnered considerable attention in recent years due to the discovery of its potent and broad-spectrum antiviral activities[@tripp2022]. Extensive research has demonstrated its efficacy against a range of respiratory viruses, including variants of SARS-CoV-2, Respiratory Syncytial Virus (RSV), and contemporary influenza strains. This antiviral action has been consistently observed in both in vitro cellular assays and in vivo animal models, highlighting its potential as a repurposed therapeutic agent for infectious diseases.
+
+A critical distinction of probenecid lies in its classification as a host-directed antiviral (HDA) drug. Unlike traditional direct-acting antivirals that specifically target viral components, probenecid exerts its effects by interfering with essential host cellular pathways that viruses exploit for their replication cycles. This fundamental difference in mechanism offers a significant advantage: by targeting host factors, probenecid inherently presents a higher barrier to the development of viral resistance. This approach provides a broader antiviral spectrum across various viral strains and types, addressing a major limitation of many conventional antivirals that are susceptible to resistance mutations. The strategic benefit of this host-directed approach is its potential for sustained efficacy against rapidly evolving pathogens like influenza.
+
+A further key advantage of probenecid lies in its dual mechanism of action, as it targets both viral replication and host inflammatory responses [@hong2025]. As a result, treatment with probenecid may reduce viral load directly, while also attenuating inflammation-driven disease severity [@martin2023]. 
+
+Because the therapeutic efficacy of probenecid is closely tied to its dosing regimen [@cunningham1981], optimization of the dose and schedule is essential for maximizing its antiviral and anti-inflammatory effects while minimizing the risk of adverse outcomes [@martin2023; @murray2023].
+
+In the present study, a quantitative systems pharmacology (QSP) model was developed to optimize probenecid dosing regimens. The QSP model aimed to provide insights and recommendations for improved dosing strategies for the use of probenecid in treating influenza A infections. It was found that dose adjustments could compensate for reduced dosing frequency; however, delayed treatment initiation could not be fully mitigated by dose escalation. These findings are expected to guide future refinement of probenecid regimens in the context of human clinical trials.
+
+
+
+
+{{< pagebreak >}}
+
+# Methods 
+
+## Data
+
+Data came from a recently published study on H5N1 influenza infections in mice [@murray2024]. In brief, female BALB/c mice were infected with 3 LD50 of H5N1 influenza virus. Animals either received no treatment or were given probenecid at a dosage of 10mg/kg or 100mg/kg (with an average mouse weight of 20g) twice daily by gavage, starting on day 1 post infection and continuing for 3 days. Viral loads, cytokine levels, and weight loss were measured on various days post infection. The data used includes viral load, body weight (as a measure of symptoms), and innate immune response (specifically, IL-6). For more details on the data, please refer to the original publication.
+
+
+## Model
+
+We implemented a mechanistic QSP model that incorporates the pharmacokinetics (PK) and pharmacodynamics (PD) of probenecid, as well as the dynamics of virus infection and immune response. Our model calibration is specific to influenza infection in mice, but with adaptations, this model could be applicable to other hosts and acute viral infections (e.g. SARS-CoV-2 or RSV).
+
+The following sections describe each model component in detail.
+
+
+### Pharmacokinetics (PK) component
+
+Our pharmacokinetic model for probenecid includes some of the known drug characteristics, while also keeping the overall model parsimonious. We model the 3 physiologically relevant sites, namely the oral depot, central compartment, and peripheral compartment (respiratory tract and lung). 
+
+Drug of amount $A_0$ is deposited orally at treatment times, $T_x$, into the depot compartment, $A_d$, and absorbed into the central compartment at rate $k_a$. The fraction that is bioavailable in the central compartment is denoted by $F_b$. 
+
+Probenecid clearance was shown to be nonlinear and saturating [@emanuelsson1987; @emanuelsson1988]. Thus, following prior work [@murray2021], we model drug clearance from the central compartment with a Michaelis-Menten term with maximum clearance $V_{max}$ and half-maximum clearance concentration $K_m$. 
+
+Transfer of the drug between central and target compartments is denoted by $Q$ and assumed to be bidirectional. The volumes of distribution of the central and target compartments are denoted by $V_c$ and $V_t$, respectively. 
+
+
+The PK sub-model is described by the following set of differential equations:
+
+$$
+\begin{aligned}
+\textrm{Probenecid amount depot:} \quad \dot A_d & =  - k_a A_d \\ 
+\textrm{Probenecid amount central:} \quad \dot A_{c} & = F_b k_a A_d  - \frac{Q}{V_c} A_{c} + \frac{Q}{V_t}A_t -  \frac{V_{max} A_{c}}{(K_m V_c  + A_{c})}  \\ 
+\textrm{Probenecid amount target:} \quad \dot A_t & = \frac{Q}{V_c} A_{c} -  \frac{Q}{V_t}A_t 
+\end{aligned}
+$$ {#eq-pk}
+
+
+
+The lack of PK data precludes the reliable estimation of the PK model parameters. We thus fixed these model parameters based on literature values, as follows.
+
+Absorption rate estimates for probenecid in mice are not available. Peak concentrations in humans have been reported to be around 1 to 5 hours [@cunningham1981]. The absorption rate was estimated to be $\approx 0.43 / h$ in [@emanuelsson1987], which is in line with peak concentration after a few hours. Absorption rates are generally fairly similar across species [@chiou2000]. Given that and the lack of mouse-specific data, we use the human-derived value for our model. 
+
+Probenecid has been reported to be essentially completely absorbed orally [@pubchem; @emanuelsson1987; @cunningham1981], we thus assume that the full amount deposited into the oral compartment is bioavailable in the central compartment and set $F_b = 1$.
+
+
+For the volume of distribution in the central compartment, $V_c$, a value of $\approx 55 mL$ was reported for rats [@emanuelsson1988]. Applying allometric scaling from the reported rat weight of 260g to the average weight of mice in our study of 20g, and a scaling factor of 1 [@ings1990], leads to $V_c = 55mL \times (20g/260g) \approx 4mL$. For the volume of distribution in the target compartment, we assumed it to represent mouse pulmonary lung volume (as opposed to air volume), which has been reported to be around $0.18 mL$ [@kaul2021].
+
+The maximum and half-level elimination parameters have been reported for rats as $V_{max} \approx 180 \mu \textrm{g/min}$ and $K_m \approx 60 \mu\textrm{g/mL}$ [@emanuelsson1988]. Allometric scaling with a coefficient of 0.75 [@ings1990; @vanvalkengoed2025; @white2005] applied to maximum clearance leads to $V_{max} = 180 \mu \textrm{g/min} \times (20g/260g)^(0.75) \approx 1.6 \textrm{mg/h}$. For the half-maximum cocentration value, we assume that it is approximately the same in mice. Note that this is the apparent total $K_m$, absorbing binding effects under rapid equilibrium. For simplicity, our model assumes a single route of elimination, exclusively from the central compartment.
+
+Since the lungs receive the full the entire blood flow from the heart [@jain2025], transport between central site and target side is rapid. Cardiac output was reported to be $\approx 10 - 20mL/min$ for mice [@janssen2002; @tournoux2011; @kreissl2006], defining an upper bound for $Q$. However, for the transport of the drug to the epithelium, permeability, not flow, is expected to be the rate-limiting step. Thus, the free drug intercompartmental transfer rate, $Q$, is dominated by the permeability of the free drug to the target site. With mouse lung surface area, $S$, of around 100cm$^2$ [@knust2009] and permeability for a similar weight molecule in the range of $5 - 15 \times 10^{-7}\textrm{cm/sec}$ [@suresh2021] gives an approximate estimate of $Q = 100\textrm{cm}^2 * 10^{-6} \textrm{cm/sec} = 0.36 \textrm{mL/h}$.
+
+
+
+
+### Pharmacodynamic (PD) component
+
+Two distinct pharmacodynamic effects of probenecid were considered: antiviral and anti-inflammatory. Each mechanism was modeled using a direct response model with an Emax function, by which the drug concentration, is mapped to the corresponding effect [@goutelle2008]. 
+
+While the total concentration of the drug in the target compartment is given by $C_t = A_t/V_t$, probenecid binds to albumin, and only the unbound fraction of the drug, $C_u = f_u C_t$ is assumed to have a pharmacodynamic effect. For the central/plasma compartment, it was shown that the unbound fraction is concentration dependent [@emanuelsson1987; @emanuelsson1988]. A similar pattern is expected to hold for the target respiratory/lung compartment, however with a higher level of unbound drug, due to interstitial albumin concentration being around 20–30% of that in the plasma [@ellmerer2000]. To capture the reported concentration dependent binding pattern, we follow [@emanuelsson1987; @emanuelsson1988] and specify the fraction unbound as $f_u =  \frac{f_{max} C_{t}}{f_{50} + C_{t}}$, with $f_{max}$ the maximum fraction of unbound drug, and $f_{50}$ is the drug concentration at which binding is half-maximum. Values for rats reported in [@emanuelsson1988] are $f_{max} = 0.5$ and $f_{50} = 120 \mu g / mL$ for the plasma compartment. While a higher value for $f_{max}$ is expected for the target compartment, we decided to use the reported value as a conservative value as a lower bound for the expected free drug concentration at the target site.  
+
+
+The PD functions describing the two effects are given by the following equations:
+
+$$
+\begin{aligned}
+\textrm{antiviral effect:} \quad f_V & =  \frac{E_{max,V} C_u}{C_{50,V} + C_u } \\
+\textrm{anti-inflammatory effect:} \quad f_F & = \frac{E_{max,F} C_u}{C_{50,F} + C_u } 
+\end{aligned}
+$$ {#eq-pd1}
+
+The maximum antiviral or anti-inflammatory effect of the drug is denoted by $E_{max,V}$ or $E_{max,F}$, and is constrained between 0 and 1. A value of 1 is interpreted as the drug's ability to either fully inhibit virus production by infected cells or completely suppress the induction of the innate inflammatory response. Based on in vitro data [@murray2024], complete virus suppression at high concentrations of probenecid is assumed. Accordingly, $E_{max,V}$ was fixed at 1. $E_{max,F}$, as well as the two half-maximum parameters, $C_{50,V}$ and $C_{50,F}$, were estimated during the fitting process.  
+
+
+
+
+### QSP component
+
+An acute viral infection was modeled, and the dynamics of uninfected cells, infected cells, virus, the innate immune response, the adaptive immune response, and symptoms were tracked. A structure similar to those previously used by us and others to describe the dynamics of influenza infections was adopted [@handel2010; @handel2018; @canini14a; @dobrovolny13; @handel2018b; @beauchemin11; @kamal15]. The model is illustrated schematically in @fig-model and given mathematically by the following set of ordinary differential equations:
+
+$$
+\begin{aligned}
+\textrm{Uninfected cells:} \quad \dot U & = -bUV \\
+\textrm{Infected cells:} \quad \dot I & = bUV - c_I I - k IA\\
+\textrm{Virus:} \quad \dot V & = (1 - f_V)\frac{p}{ (1 + k_F F)}I - c_V V \\
+\textrm{Innate response:} \quad \dot F & = (1 - f_F)\frac{g_F V}{V+h_V} (F_{max}-F) - c_F F \\
+\textrm{Adaptive response:} \quad \dot A & = \frac{FV}{FV+h_F} + g_A A \\ 
+\textrm{Symptoms:} \quad \dot S & = g_S F - c_S S \\ 
+\end{aligned}
+$$ {#eq-qsp}
+
+
+```{r}
+#| label: fig-model
+#| fig-cap: "Schematic of the QSP model. Uninfected cells, $U$, can become infected by virus at rate $b$. Infected cells, $I$, produce virus, $V$, at a maximum rate $p$, are cleared by the adaptive immune response, $A$, (e.g., CD8 T-cells) at rate $k_A$ and die due to other mechanisms at rate $c_I$. Virus production is reduced by the antiviral effect of probenecid ($f_V$) and the antiviral activity of the innate response, F, with the strength of the latter mechanism controlled by parameter $k_F$. Virus is cleared at rate $c_V$ by various unmodeled mechanisms (e.g., degradation, mucosal clearance). The innate immune response (here envisioned to be IL-6 based on the data) is induced by the presence of virus, the induction is modeled with a Hill function with maximum induction rate $g_F$ and the half-maximum induction rate controlled by parameter $h_V$. The drug can reduce the induction of the innate immune response, controlled by the PD parameter $f_F$. Innate induction is capped at a maximum determined by $F_{max}$. The innate immune response decays at rate $c_F$. The adaptive immune response (here envisioned to be mainly CD8 T-cells, but kept generic) is induced by the combination of virus and innate immune strength, with parameter $h_F$ controlling the rate of induction. After induction/activation, the adaptive response grows exponentially at rate $g_A$. Since we only model an acute infection, we do not consider dynamics beyond the peak of the adaptive response, and thus ignore any possible decline. Symptoms, S, are modeled as being induced by the innate response at rate $g_S$, with a rate of decline $c_S$."
+#| echo: FALSE
+knitr::include_graphics(here("assets", "model-diagram.png"))
+```
+
+
+
+
+## Fitting procedure
+
+Some of the PK and PD parameters were fixed as described above. To reduce overfitting, additional prior information from previously published studies was used to fix selected parameters of the QSP model. Specifically, $c_F = 1$/day was set based on the reported decay rate of IL-6 [@kuribayashi2018], the T-cell growth rate was fixed at $g_A = 3$/day [@lewis2021] and the clearance rate of infected cells was set to $c_I = 1$/day [@smith11].
+
+To estimate the remaining parameters, the model variables for viral load, innate response, and symptoms were fit to the data from the H5N1 mouse study. The model was simultaneously fit to all three variables across the three treatment conditions (untreated, 10 mg, 100 mg). Since a large fraction of the data was obtained by destructive sampling of the animals, a mixed-effects approach that accounts for longitudinal sampling was not feasible. Instead, a weighted least squares approach was used, with weights based on the sample size of each measurement. Each measured variable was further normalized by its maximum value to ensure comparable importance across variables. This resulted in the following objective function being minimized by the fitting routine:
+
+$$
+O = \sum_{j,k} \frac{1}{N_{j,k} }  \sum_{i} \left( \frac{  (D_{i,j,k} - M_{i,j,k}) }{ D_j^{max} }\right)^2 
+$$
+
+where $D_{i,j,k}$ is the data, i.e. the measured value $i$ for variable $j$ in treatment condition $k$, and $M_{i,j,k}$ is the model prediction. $N_{j,k}$ is the number of data points for variable $j$ in treatment condition $k$. $D_j^{max}$ is the maximum measured value for variable $j$ across all treatment conditions.
+
+To explore uncertainty in the estimates for the fixed parameters, latin hypercube sampling was used to generate 100 samples for all fixed parameters sampled uniformly with lower and upper ranges half and twice the baseline value. The only parameter that was not sampled based on strong prior evidence was $E_{max,V}$. For each sample of the fixed parameters, the model was refit and then used to produce the dose-response predictions shown in the results. 
+
+
+## Model implementation
+
+The model was implemented in R using the deSolve package [@soetaert10]. The model was fit to the data using the NLopt library through the nloptr R package [@johnson2008]. The data and model code to reproduce all our findings are available as part of the supplement.
+
+
+
+# Results
+
+
+## Model calibration
+
+
+The model was fit to data for viral load, weight loss (used as a proxy for morbidity and symptoms), and IL-6 levels (used as a proxy for the innate inflammatory response) from the H5N1 mouse study. Fitting was performed simultaneously across all three treatment conditions (untreated, 10 mg, and 100 mg). The model fits to the data are shown in @fig-bestfit for the baseline values of the fixed parameters. The table of parameter estimates and model diagnostic plots (predicted versus observed, and residuals) are provided in the Supplement. Additional figures and tables showing equivalent results for all 100 samples of the fixed parameters are produced by the code included in the supplement and can be re-generated and inspected by interested readers, but are not shown.
+
+
+
+```{r}
+#| label: fig-bestfit
+#| fig-cap: "Best fit of model to the data. Circles, triangles and squares show data for those variables where it was available (virus load, innate immunity/IL-6, symptoms/weight loss) for untreated, 10mg and 100mg doses, respectively. Solid, dashed and dotted lines show the best fit of the model for the untreated, 10mg and 100mg doses, respectively. "
+#| echo: FALSE
+knitr::include_graphics(here("results", "figures", "bestfit1.png"))
+```
+
+
+
+
+## Assessing the impact of dosing strength
+
+
+Subsequently, the calibrated model we used to explore the impact of varying probenecid dosing strength on virus load, inflammatory response and morbidity/symptoms. In the experimental setup, doses of 10mg and 100mg were administered. The model was used to simulate a wide range of doses from 0.001mg/kg to 1,000mg/kg, using the same dosing schedule as in the original study design, namely given twice daily for 3 days, starting on day 1 post-infection. As shown in @fig-dosepred, the total log virus load declined fairly rapidly between 10 and 100mg/kg. In contrast, the innate response and morbidity exhibited their greatest reductions at lower doses, and showed minimal changes beyond 1mg/kg. It should be noted that a dose of 10mg/kg corresponds to around 700mg for humans, which approaches the FDA approved maximum dose of 1,000mg twice per day (or 2,000mg per day). 
+
+
+```{r}
+#| label: fig-dosepred
+#| fig-cap: "Outcomes for different doses. The left panel shows percent reduction in total log virus load (area under the curve) compared to no treatment. The middle panel shows the same for the innate response (IL 6), the right panel shows reduction in morbidity (weight loss). The vertical lines indicate the doses used in the experiment (10mg/kg and 100mg/kg). A figure with the time-series of all variables for doses of 1, 10 and 100mg is shown in the supplement."
+#| echo: FALSE
+knitr::include_graphics(here(
+  "results",
+  "figures",
+  "dose-response-baseline.png"
+))
+```
+
+
+
+
+
+
+
+## Assessing delayed dosing regimens
+
+Early treatment enhances the impact of antivirals against acute infections, such as influenza [@hayden96; @swierczynska2022]. However, delays between infection, symptom onset, and access to treatment were found to significantly reduce efficacy. The model was used to evaluate how different doses would impact the results if treatment started at day 2 or day 3 post infection, instead of day 1. For each scenario, we assumed an otherwise equivalent treatment schedule, namely twice daily treatment for 3 days following treatment start. As shown in Figure @fig-dosepred2, increases in dose were largely unable to compensate for delayed treatment. For viral load, a dose approximately five times higher, when started on day 2, achieved a similar reduction to that produced by 10 mg/kg initiated on day 1. No dose within the tested range was able to replicate this effect when treatment was delayed until day 3. Similarly, increased dosing did not restore efficacy for either the innate immune response or morbidity reduction. These findings are consistent with previous studies that have emphasized the importance of early antiviral intervention for optimal therapeutic benefit  [@hayden96; @ison2020]. 
+
+
+
+
+
+
+
+```{r}
+#| label: fig-dosepred2
+#| fig-cap: "Outcomes for different treatment start times. Compared with a treatment start on day 1 (baseline), the model predicts that later treatments lead to less reduction in virus load, innate immune responses and symptoms. Figures with the time-series of all variables for doses of 1, 10 and 100mg for both day 2 and day 3 treatment start are shown in the supplement."
+#| echo: FALSE
+knitr::include_graphics(here("results", "figures", "dose-response-txstart.png"))
+```
+
+
+
+
+## Assessing less frequent dosing regimens
+
+Another important consideration identified through our simulations was the frequency of dosing, as less frequent regimens are generally preferred in clinical practice. The experimental study used twice-daily dosing. We used the model to explore a daily dosing regimen starting at day 1 and lasting until day 4, and a single treatment at day 1.
+As expected, @fig-dosepred3 illustrates that less frequent dosing requires higher doses to achieve similar results compared to more frequent dosing. Interestingly, reducing the dosing frequency from twice daily to once daily did not lead to a marked reduction in efficacy. Furthermore, even a single-dose regimen administered on day 1 was able to produce substantial reductions in viral load, innate immune response, and morbidity when the dose was increased appropriately. Overall, reduced dosing frequency was found to have a significantly smaller impact on treatment efficacy than delayed initiation of treatment.
+
+
+
+```{r}
+#| label: fig-dosepred3
+#| fig-cap: "Outcomes for different dosing frequencies. Compared to twice daily dosing, daily dosing leads to very similar results, and even single dosing does not lead to marked reduce of efficacy. Figures with the time-series of all variables for doses of 1, 10 and 100mg for both daily and single dosing are shown in the supplement."
+#| echo: FALSE
+knitr::include_graphics(here(
+  "results",
+  "figures",
+  "dose-response-txinterval.png"
+))
+```
+
+
+
+
+
+# Discussion
+
+
+This work presents what is, to our knowledge, the first influenza-specific QSP model that integrates probenecid pharmacokinetics and dual antiviral/anti-inflammatory pharmacodynamics with host-virus interactions. The framework extends earlier influenza PK/PD and viral-dynamics models [@canini14a; @petrie2013] by explicitly linking drug concentrations to simultaneous suppression of viral production and innate-immune cytokine induction.
+
+Model simulations showed that the impacts of dose on the viral load, immune response and symptoms were strongly nonlinear. The ranges for which dose has a strong or weak impact differed between outcomes. Although less frequent dosing, such as daily dosing, might be lead to very minor reduction in drug efficacy, we also found that even large dose escalations cannot fully restore efficacy when therapy is delayed, echoing findings from studies with zanamivir and baloxavir [@hayden96; @ison2020]. 
+
+The main limitation of our study is that the data came from studies in mice, which are not a natural host for influenza. Further, while we fixed several parameters to reduce the risk of over-fitting, and built our model based on biologically plausible processes, the exact equations are always unknown, and a different model formulation might produce somewhat different predictions, even after calibration with the same data. We also only had no drug concentration data and limited immune response data, and the model is fit to IL-6, as a proxy for the overall innate response. Further measurements of additional immune markers could further strengthen model discrimination.
+
+Overall, our modelling indicates that (i) early probenecid administration is critical, (ii) higher daily doses can offset reduced dosing frequency but not late treatment, and (iii) assuming transferability of the mouse system and model to humans, clinically achievable exposures should translate into meaningful reductions in viral burden and disease severity. Together with accumulating in-vitro and in-vivo evidence of broad antiviral activity, these findings support advancing probenecid into controlled influenza trials and showcase the value of QSP approaches in accelerating drug-repurposing campaigns.
+
+
+# Acknowledgements
+
+We thank Andrew Woodward for comments on an earlier version of the manuscript that helped improve the model formulation.
+
+
+
+# References
+
+
+

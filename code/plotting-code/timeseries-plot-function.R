@@ -1,113 +1,112 @@
 ################################
-# Packages
+# Packages needed are
+# ggplot2, dplyr, patchwork
+# they are loaded in the script(s) calling this function
 ################################
-library(ggplot2)
-library(dplyr)
-library(patchwork)
 
 ################################
 # Time-series plotting function
 ################################
 plot_timeseries <- function(data = NULL, modelfit, tmax = 7, dose_levels) {
-  
   ## -------------------------------------------------------------------------
   ## Aesthetics and labels
   ## -------------------------------------------------------------------------
-  color_vals    <- c("#0072B2", "#009E73", "#D55E00")      # Okabe–Ito colours
+  color_vals <- c("#0072B2", "#009E73", "#D55E00") # Okabe–Ito colours
   linetype_vals <- c("solid", "dashed", "dotted")
-  shape_vals    <- c(16, 17, 15)
-  
+  shape_vals <- c(16, 17, 15)
+
   ## -------------------------------------------------------------------------
   ## Ensure Dose is a factor with the desired labels
   ## -------------------------------------------------------------------------
   modelfit <- modelfit %>%
-    mutate(Dose = factor(Dose,
-                         levels = c(0, 10, 100),
-                         labels = dose_levels))
-  
+    mutate(Dose = factor(Dose, levels = c(0, 10, 100), labels = dose_levels))
+
   if (!is.null(data) && nrow(data) > 0) {
     data <- data %>%
-      mutate(Dose = factor(Dose,
-                           levels = c(0, 10, 100),
-                           labels = dose_levels))
-    
-    Vvals  <- data %>% filter(Quantity == "LogVirusLoad") %>%
+      mutate(Dose = factor(Dose, levels = c(0, 10, 100), labels = dose_levels))
+
+    Vvals <- data %>%
+      filter(Quantity == "LogVirusLoad") %>%
       mutate(Value = 10^Value)
     Innvals <- data %>% filter(Quantity == "IL6")
     Symvals <- data %>% filter(Quantity == "Weight")
   } else {
     Vvals <- Innvals <- Symvals <- NULL
   }
-  
+
   ## -------------------------------------------------------------------------
   ## Re-usable panel builder
   ## -------------------------------------------------------------------------
-  plot_template <- function(df_line,
-                            df_point = NULL,
-                            xvar, yvar,
-                            ylabel,
-                            logy        = FALSE,
-                            ylimits     = NULL,
-                            tmax        = 7,
-                            keep_legend = FALSE) {
-
+  plot_template <- function(
+    df_line,
+    df_point = NULL,
+    xvar,
+    yvar,
+    ylabel,
+    logy = FALSE,
+    ylimits = NULL,
+    tmax = 7,
+    keep_legend = FALSE
+  ) {
     # define the guide only when this panel should provide it
-  colour_guide <- if (keep_legend) guide_legend(
-    override.aes = list(
-      linetype = linetype_vals,
-      shape    = shape_vals,
-      size     = 1.2,
-      alpha    = 1
-    )
-  ) else "none"
-    
+    colour_guide <- if (keep_legend) {
+      guide_legend(
+        override.aes = list(
+          linetype = linetype_vals,
+          shape = shape_vals,
+          size = 1.2,
+          alpha = 1
+        )
+      )
+    } else {
+      "none"
+    }
+
     p <- ggplot() +
       geom_line(
         data = df_line,
-        aes(x        = !!sym(xvar),
-            y        = !!sym(yvar),
-            colour   = Dose,
-            linetype = Dose),
+        aes(x = !!sym(xvar), y = !!sym(yvar), colour = Dose, linetype = Dose),
         linewidth = 1.2,
-        show.legend = keep_legend           # <- only this panel feeds the legend
+        show.legend = keep_legend # <- only this panel feeds the legend
       ) +
       labs(x = NULL, y = ylabel) +
-      
+
       ## ---- single combined legend comes from the colour scale --------------
-    scale_colour_manual(
-      name   = "Scenario",                        # legend title
-      values = setNames(color_vals, dose_levels),
-      breaks = dose_levels,
-      guide  = colour_guide               # <- legend only on the chosen panel
-     ) +
+      scale_colour_manual(
+        name = "Scenario", # legend title
+        values = setNames(color_vals, dose_levels),
+        breaks = dose_levels,
+        guide = colour_guide # <- legend only on the chosen panel
+      ) +
       ## hide separate linetype & shape legends
-      scale_linetype_manual(values = setNames(linetype_vals, dose_levels),
-                            guide  = "none") +
-      scale_shape_manual(values = setNames(shape_vals, dose_levels),
-                         guide  = "none")
-    
+      scale_linetype_manual(
+        values = setNames(linetype_vals, dose_levels),
+        guide = "none"
+      ) +
+      scale_shape_manual(
+        values = setNames(shape_vals, dose_levels),
+        guide = "none"
+      )
+
     ## add points if measurement data exist
     if (!is.null(df_point) && nrow(df_point) > 0) {
       p <- p +
         geom_point(
           data = df_point,
-          aes(x      = xvals,
-              y      = Value,
-              colour = Dose,
-              shape  = Dose),
-          size  = 2.5,
+          aes(x = xvals, y = Value, colour = Dose, shape = Dose),
+          size = 2.5,
           alpha = 0.5,
-           show.legend = FALSE                # <- crucial: no separate shape legend
+          show.legend = FALSE # <- crucial: no separate shape legend
         )
     }
-    
+
     ## y-axis scaling
     if (logy) {
       p <- p + scale_y_log10(limits = ylimits)
     } else if (!is.null(ylimits)) {
       p <- p + scale_y_continuous(limits = ylimits)
     }
-    
+
     ## x-axis settings
     p <- p +
       scale_x_continuous(
@@ -118,58 +117,136 @@ plot_timeseries <- function(data = NULL, modelfit, tmax = 7, dose_levels) {
       theme_minimal() +
       theme(
         panel.grid.minor.x = element_blank(),
-        axis.text.x        = element_text(size = 12),
-        axis.text.y        = element_text(size = 12),
-        legend.key.width = unit(2, "cm"),   # NEW – longer legend line segments
-        axis.title.y       = element_text(size = 14),
-        legend.position    = "none"          # legends collected by patchwork      )
+        axis.text.x = element_text(size = 12),
+        axis.text.y = element_text(size = 12),
+        legend.key.width = unit(2, "cm"), # NEW – longer legend line segments
+        axis.title.y = element_text(size = 14),
+        legend.position = "none" # legends collected by patchwork      )
       )
     p
   }
-  
+
   ## -------------------------------------------------------------------------
-  ## Build the eight panels
+  ## Build the panels, one for each model variable
   ## -------------------------------------------------------------------------
-  p_uc  <- plot_template(modelfit, NULL,    "time", "U",  "Uninfected Cells",
-                         logy = TRUE,  ylimits = c(1e2, 1e7),  tmax = tmax, keep_legend = TRUE)
-  p_ic  <- plot_template(modelfit, NULL,    "time", "I",  "Infected Cells",
-                         logy = TRUE,  ylimits = c(1e-2, 1e10), tmax = tmax)
-  p_vir <- plot_template(modelfit, Vvals,   "time", "V",  "Virus Load",
-                         logy = TRUE,  ylimits = c(1e-2, 1e10), tmax = tmax)
-  p_inn <- plot_template(modelfit, Innvals, "time", "F",  "Innate Response (IL-6)",
-                         logy = FALSE, ylimits = c(0, 2),        tmax = tmax)
-  p_ada  <- plot_template(modelfit, NULL,    "time", "A",  "Adaptive Response",
-                         logy = TRUE,  ylimits = c(1e-2, 1e10), tmax = tmax)
-  p_sym <- plot_template(modelfit, Symvals, "time", "S",  "Morbidity (weight loss)",
-                         logy = FALSE, ylimits = c(0, 30),       tmax = tmax)
-  p_ad  <- plot_template(modelfit, NULL,    "time", "Ad", "Drug depot compartment",
-                         logy = TRUE,  ylimits = c(1e-5, 1e1),   tmax = tmax)
-  p_ac  <- plot_template(modelfit, NULL,    "time", "Ac", "Drug central compartment",
-                         logy = TRUE,  ylimits = c(1e-5, 1e0),   tmax = tmax)
-  p_at  <- plot_template(modelfit, NULL,    "time", "At", "Drug target compartment",
-                         logy = TRUE,  ylimits = c(1e-6, 1e-1),   tmax = tmax)
-  
+  p_uc <- plot_template(
+    modelfit,
+    NULL,
+    "time",
+    "U",
+    "Uninfected Cells",
+    logy = TRUE,
+    ylimits = c(1e2, 1e7),
+    tmax = tmax,
+    keep_legend = TRUE
+  )
+  p_ic <- plot_template(
+    modelfit,
+    NULL,
+    "time",
+    "I",
+    "Infected Cells",
+    logy = TRUE,
+    ylimits = c(1e-2, 1e10),
+    tmax = tmax
+  )
+  p_vir <- plot_template(
+    modelfit,
+    Vvals,
+    "time",
+    "V",
+    "Virus Load",
+    logy = TRUE,
+    ylimits = c(1e-2, 1e10),
+    tmax = tmax
+  )
+  p_inn <- plot_template(
+    modelfit,
+    Innvals,
+    "time",
+    "F",
+    "Innate Response (IL-6)",
+    logy = FALSE,
+    ylimits = c(0, 2),
+    tmax = tmax
+  )
+  p_ada <- plot_template(
+    modelfit,
+    NULL,
+    "time",
+    "A",
+    "Adaptive Response",
+    logy = TRUE,
+    ylimits = c(1e-2, 1e10),
+    tmax = tmax
+  )
+  p_sym <- plot_template(
+    modelfit,
+    Symvals,
+    "time",
+    "S",
+    "Morbidity (weight loss)",
+    logy = FALSE,
+    ylimits = c(0, 30),
+    tmax = tmax
+  )
+  p_ad <- plot_template(
+    modelfit,
+    NULL,
+    "time",
+    "Ad",
+    "Drug depot compartment",
+    logy = TRUE,
+    ylimits = c(1e-5, 1e1),
+    tmax = tmax
+  )
+  p_ac <- plot_template(
+    modelfit,
+    NULL,
+    "time",
+    "Ac",
+    "Drug central compartment",
+    logy = TRUE,
+    ylimits = c(1e-5, 1e0),
+    tmax = tmax
+  )
+  p_at <- plot_template(
+    modelfit,
+    NULL,
+    "time",
+    "At",
+    "Drug target compartment",
+    logy = TRUE,
+    ylimits = c(1e-6, 1e-1),
+    tmax = tmax
+  )
+
   ## -------------------------------------------------------------------------
   ## Assemble, collect legend, add global x-axis label
   ## -------------------------------------------------------------------------
   combined_plot <- (p_uc | p_ic | p_vir) /
-                   ( p_inn | p_ada | p_sym ) /
-                   (p_ad | p_ac | p_at) +
+    (p_inn | p_ada | p_sym) /
+    (p_ad | p_ac | p_at) +
     plot_layout(guides = "collect") &
     theme(
-      legend.position      = "top",
-      legend.direction     = "horizontal",
+      legend.position = "top",
+      legend.direction = "horizontal",
       legend.justification = "center"
     )
-  
-  combined_plot +
+
+  final_plot <- combined_plot +
     plot_annotation(
       caption = "Days",
       theme = theme(
         plot.caption = element_text(
-          hjust = 0.5, vjust = -0.5, face = "bold", size = 14
+          hjust = 0.5,
+          vjust = -0.5,
+          face = "bold",
+          size = 14
         ),
         plot.margin = margin(b = 20)
       )
     )
+
+  return(final_plot)
 }

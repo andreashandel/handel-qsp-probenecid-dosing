@@ -203,10 +203,9 @@ if (sum((par_ini - lb) < 0) > 0) {
 }
 
 #different solver types
-#algname = "NLOPT_LN_COBYLA"
+algname = "NLOPT_LN_COBYLA"
 #algname = "NLOPT_LN_NELDERMEAD"
-algname = "NLOPT_LN_SBPLX"
-
+#algname = "NLOPT_LN_SBPLX"
 
 maxsteps = 1000 #number of steps/iterations for algorithm
 maxtime = 10 * 60 * 60 #maximum time in seconds (h*m*s)
