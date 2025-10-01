@@ -22,3 +22,13 @@ This directory contains a self-contained Julia implementation of the quantitativ
 3. Run the scripted workflows as described in the readme files within `analysis/`, `plotting/`, and `scripts/`.
 
 The Julia implementation reads the same input files as the R code (`data/processed-data/*`) and writes outputs to the same locations in `results/`.  All file paths are resolved relative to the repository root.
+
+## Quick simulation walkthrough
+
+For a tutorial-style introduction to the model that avoids any parameter fitting, run:
+
+```bash
+julia scripts/run_simulation_demo.jl
+```
+
+The script is extensively commented to explain how the initial conditions, fixed pharmacokinetic parameters and dosing schedule are assembled before calling the `simulate_model` function.  Command-line flags allow you to adjust the dose (`--dose`), dosing schedule (`--txstart`, `--txinterval`, `--txend`) and simulation window (`--duration`, `--dt`).  Use `--help` to see the full list of options.
