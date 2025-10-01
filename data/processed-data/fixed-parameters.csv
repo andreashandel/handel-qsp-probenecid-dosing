@@ -1,0 +1,11 @@
+parname,parnamefull,value,units
+ka,Absorption rate,10.32,1/d
+Vc,Central compartment volume,4,mL
+Vt,Target (lung/respiratory) compartment effective volume,0.18,mL
+Q,Bidirectional intercompartmental transport,8.64,mL/d
+Vmax,Maximal elimination rate,38.4,mg/d
+Km,Half-max for saturable elimination,0.06,mg/mL
+Emax_V,Max antiviral effect,1,unitless
+cF,innate decay rate, 1,1/d
+cI,Infected cell death rate,1,1/d
+gA,Max growth rate of T cells,3,1/d
