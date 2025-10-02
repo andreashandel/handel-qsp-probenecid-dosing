@@ -5,6 +5,8 @@ Vt,Target (lung/respiratory) compartment effective volume,0.18,mL
 Q,Bidirectional intercompartmental transport,8.64,mL/d
 Vmax,Maximal elimination rate,38.4,mg/d
 Km,Half-max for saturable elimination,0.06,mg/mL
+fmax,Maximum unbound fraction,0.5,unitless
+f50,half-max of binding,0.12,mg/mL
 Emax_V,Max antiviral effect,1,unitless
 cF,innate decay rate, 1,1/d
 cI,Infected cell death rate,1,1/d

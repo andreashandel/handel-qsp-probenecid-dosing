@@ -12,7 +12,7 @@ plot_timeseries <- function(data = NULL, modelfit, tmax = 7, dose_levels) {
   ## Aesthetics and labels
   ## -------------------------------------------------------------------------
   color_vals <- c("#0072B2", "#009E73", "#D55E00") # Okabe–Ito colours
-  linetype_vals <- c("solid", "dashed", "dotted")
+  linetype_vals <- c("solid", "42", "12") #F4 means length of dashes, 10 means frequency of dot
   shape_vals <- c(16, 17, 15)
 
   ## -------------------------------------------------------------------------
@@ -67,6 +67,7 @@ plot_timeseries <- function(data = NULL, modelfit, tmax = 7, dose_levels) {
         data = df_line,
         aes(x = !!sym(xvar), y = !!sym(yvar), colour = Dose, linetype = Dose),
         linewidth = 1.2,
+        lineend = "round",
         show.legend = keep_legend # <- only this panel feeds the legend
       ) +
       labs(x = NULL, y = ylabel) +
@@ -94,8 +95,8 @@ plot_timeseries <- function(data = NULL, modelfit, tmax = 7, dose_levels) {
         geom_point(
           data = df_point,
           aes(x = xvals, y = Value, colour = Dose, shape = Dose),
-          size = 2.5,
-          alpha = 0.5,
+          size = 2.0,
+          alpha = 0.4,
           show.legend = FALSE # <- crucial: no separate shape legend
         )
     }
@@ -119,7 +120,7 @@ plot_timeseries <- function(data = NULL, modelfit, tmax = 7, dose_levels) {
         panel.grid.minor.x = element_blank(),
         axis.text.x = element_text(size = 12),
         axis.text.y = element_text(size = 12),
-        legend.key.width = unit(2, "cm"), # NEW – longer legend line segments
+        legend.key.width = unit(2, "cm"),
         axis.title.y = element_text(size = 14),
         legend.position = "none" # legends collected by patchwork      )
       )
