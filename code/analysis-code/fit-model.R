@@ -258,7 +258,7 @@ start_time <- proc.time()
 # --- function to process a single sample i ---
 # needed for parallel processing
 #################################################
-eval_one_sample <- function(i) {
+eval_one_sample <- function(i, print_level) {
   # lightweight log (may appear slightly out of order in parallel)
   message(sprintf(
     "processing sample %d at %s",
@@ -277,7 +277,7 @@ eval_one_sample <- function(i) {
     opts = list(
       algorithm = algname,
       maxeval = maxsteps,
-      print_level = 1,
+      print_level = print_level,
       ftol_rel = ftol_rel
     ),
     fitdata = fitdata,
@@ -344,6 +344,7 @@ eval_one_sample <- function(i) {
 #########################################
 if (length(samples_list) > 1) {
   workers <- 25
+  print_level <- 0 #no diagnostics
   plan(multisession, workers = workers)
   message("Running in parallel with ", workers, " workers.")
 
@@ -351,6 +352,7 @@ if (length(samples_list) > 1) {
   bestfit_all <- future_lapply(
     seq_along(samples_list),
     eval_one_sample,
+    print_level,
     future.seed = TRUE
   )
 
@@ -358,7 +360,9 @@ if (length(samples_list) > 1) {
   plan(sequential)
 } else {
   message("Single sample detected; running sequentially (no futures).")
-  bestfit_all[[1]] <- eval_one_sample(1)
+  print_level <- 1 #diagnostics
+
+  bestfit_all[[1]] <- eval_one_sample(1, print_level)
 }
 
 
