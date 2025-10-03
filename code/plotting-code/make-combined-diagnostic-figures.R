@@ -19,7 +19,7 @@ bestfit_list = readRDS(here::here('results', 'output', 'bestfit.Rds'))
 
 nsamp = 1
 # uncomment the line below to generate best fit tables for all samples of the fixed parameters
-nsamp = length(bestfit_list)
+#nsamp = length(bestfit_list)
 for (i in 1:nsamp) {
   bestfit = bestfit_list[[i]]
   dat <- bestfit$fitdata
@@ -31,7 +31,7 @@ for (i in 1:nsamp) {
     filter(time %in% times_to_keep) %>% # keep only matching times
     select(time, Scenario, V, F, S) %>% # keep relevant columns
     mutate(
-      V = log10(V + 1e-12)
+      V = log10(pmax(1, V)) #take log, also adjust for censoring
     ) %>%
     rename(Day = time, LogVirusLoad = V, IL6 = F, Weight = S) %>%
     pivot_longer(
@@ -160,4 +160,86 @@ for (i in 1:nsamp) {
   )
   print(full_plot)
   dev.off()
-}
+
+  ###################################
+  # 7. Predicted vs Observed GOF plot
+  ###################################
+  # Reuse the joined residual dataframe to get Observed & Predicted
+  gof_df <- resid_df %>%
+    transmute(
+      Scenario,
+      Quantity,
+      Observed = Value,
+      Predicted = Predicted
+    )
+
+  # Per-facet limits so x and y share identical ranges (with small padding)
+  lims_df <- gof_df %>%
+    dplyr::group_by(Quantity) %>%
+    dplyr::summarise(
+      low = min(c(Observed, Predicted), na.rm = TRUE),
+      high = max(c(Observed, Predicted), na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    dplyr::mutate(
+      pad = 0.05 * (high - low + ifelse(high - low == 0, 1, 0)), # guard zero-range
+      low = low - pad,
+      high = high + pad
+    )
+
+  # Invisible points to enforce identical x/y ranges per facet
+  lims_pts <- dplyr::bind_rows(
+    lims_df %>% dplyr::transmute(Quantity, x = low, y = low),
+    lims_df %>% dplyr::transmute(Quantity, x = high, y = high)
+  )
+
+  gof_p <- ggplot(
+    gof_df,
+    aes(x = Observed, y = Predicted, colour = Scenario, shape = Scenario)
+  ) +
+    geom_abline(
+      slope = 1,
+      intercept = 0,
+      linetype = "dashed",
+      colour = "grey50"
+    ) +
+    geom_point(alpha = 0.75, size = 2) +
+    geom_blank(data = lims_pts, aes(x = x, y = y), inherit.aes = FALSE) +
+    facet_wrap(
+      ~Quantity,
+      nrow = 1,
+      labeller = labeller(Quantity = var_labs),
+      scales = "free"
+    ) +
+    theme(aspect.ratio = 1) +
+    scale_color_manual(
+      values = col_vals,
+      name = "Scenario:",
+      labels = scen_labs
+    ) +
+    scale_shape_manual(
+      values = shape_vals,
+      name = "Scenario:",
+      labels = scen_labs
+    ) +
+    xlab("Observed") +
+    ylab("Predicted") +
+    theme_bw(base_size = 14) +
+    theme(
+      strip.background = element_blank(),
+      strip.text = element_text(size = 12),
+      legend.position = "top"
+    )
+
+  # Save GOF figure
+  figname_gof <- paste0('pred-vs-obs-combined', i, '.png')
+  png(
+    here::here('results', 'figures', figname_gof),
+    width = 8,
+    height = 5,
+    units = 'in',
+    res = 300
+  )
+  print(gof_p)
+  dev.off()
+} #end loop over all samples

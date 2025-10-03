@@ -33,10 +33,10 @@ library(here)
 # Authors
 
 * Andreas Handel$^{1, 2, \dagger}$ (0000-0002-4622-1146);
-* Jonathan P. Mochel$^{3}$ (0000-0002-0997-3111);
 * Jackelyn Murray$^{4}$; 
 * David E. Martin$^{5}$ (0000-0003-2820-5983);
 * Ralph A. Tripp$^{4,5}$ (0000-0002-2924-9956);
+* Jonathan P. Mochel$^{3}$ (0000-0002-0997-3111);
 
 
 # Author affiliations
@@ -101,8 +101,7 @@ In the present study, a quantitative systems pharmacology (QSP) model was develo
 
 ## Data
 
-Data came from a recently published study on H5N1 influenza infections in mice [@murray2024]. In brief, female BALB/c mice were infected with 3 LD50 of H5N1 influenza virus. Animals either received no treatment or were given probenecid at a dosage of 10mg/kg or 100mg/kg (with an average mouse weight of 20g) twice daily by gavage, starting on day 1 post infection and continuing for 3 days. Viral loads, cytokine levels, and weight loss were measured on various days post infection. The data used includes viral load, body weight (as a measure of symptoms), and innate immune response (specifically, IL-6). For more details on the data, please refer to the original publication.
-
+Data came from a recently published study on H5N1 influenza infections in mice [@murray2024]. In brief, female BALB/c mice were infected with 3 LD50 of H5N1 influenza virus. Animals either received no treatment or were given probenecid at a dosage of 10mg/kg or 100mg/kg (with an average mouse weight of 20g) twice daily by gavage, starting on day 1 post infection and continuing for 3 days. Viral loads, cytokine levels, and weight loss were measured on various days post infection. The data used includes viral load, body weight (as a measure of symptoms), and innate immune response (specifically, IL-6). Since most measurements involved destructive sampling (one mouse per timepoint), and identifiers for specific animals were not recorded, individual level information is unavailable, which precludes individual-level fits. For more details on the data, please refer to the original publication.
 
 ## Model
 
@@ -145,7 +144,7 @@ For the volume of distribution in the central compartment, $V_c$, a value of $\a
 
 The maximum and half-level elimination parameters have been reported for rats as $V_{max} \approx 180 \mu \textrm{g/min}$ and $K_m \approx 60 \mu\textrm{g/mL}$ [@emanuelsson1988]. Allometric scaling with a coefficient of 0.75 [@ings1990; @vanvalkengoed2025; @white2005] applied to maximum clearance leads to $V_{max} = 180 \mu \textrm{g/min} \times (20g/260g)^(0.75) \approx 1.6 \textrm{mg/h}$. For the half-maximum cocentration value, we assume that it is approximately the same in mice. Note that this is the apparent total $K_m$, absorbing binding effects under rapid equilibrium. For simplicity, our model assumes a single route of elimination, exclusively from the central compartment.
 
-Since the lungs receive the full the entire blood flow from the heart [@jain2025], transport between central site and target side is rapid. Cardiac output was reported to be $\approx 10 - 20mL/min$ for mice [@janssen2002; @tournoux2011; @kreissl2006], defining an upper bound for $Q$. However, for the transport of the drug to the epithelium, permeability, not flow, is expected to be the rate-limiting step. Thus, the free drug intercompartmental transfer rate, $Q$, is dominated by the permeability of the free drug to the target site. With mouse lung surface area, $S$, of around 100cm$^2$ [@knust2009] and permeability for a similar weight molecule in the range of $5 - 15 \times 10^{-7}\textrm{cm/sec}$ [@suresh2021] gives an approximate estimate of $Q = 100\textrm{cm}^2 * 10^{-6} \textrm{cm/sec} = 0.36 \textrm{mL/h}$.
+Since the lungs receive the full the entire blood flow from the heart [@jain2025], transport between central site and target side is rapid. Cardiac output was reported to be $\approx 10 - 20mL/min$ for mice [@janssen2002; @tournoux2011; @kreissl2006], defining an upper bound for $Q$. However, for the transport of the drug to the epithelium, permeability, not flow, is expected to be the rate-limiting step. Thus, the intercompartmental transfer rate, $Q$, is dominated by the permeability of the drug to the target site. With mouse lung surface area, $S$, of around 100cm$^2$ [@knust2009] and permeability for a similar weight molecule in the range of $5 - 15 \times 10^{-7}\textrm{cm/sec}$ [@suresh2021] gives an approximate estimate of $Q = 100\textrm{cm}^2 * 10^{-6} \textrm{cm/sec} = 0.36 \textrm{mL/h}$.
 
 
 
@@ -154,10 +153,7 @@ Since the lungs receive the full the entire blood flow from the heart [@jain2025
 
 Two distinct pharmacodynamic effects of probenecid were considered: antiviral and anti-inflammatory. Each mechanism was modeled using a direct response model with an Emax function, by which the drug concentration, is mapped to the corresponding effect [@goutelle2008]. 
 
-While the total concentration of the drug in the target compartment is given by $C_t = A_t/V_t$, probenecid binds to albumin, and only the unbound fraction of the drug, $C_u = f_u C_t$ is assumed to have a pharmacodynamic effect. For the central/plasma compartment, it was shown that the unbound fraction is concentration dependent [@emanuelsson1987; @emanuelsson1988]. A similar pattern is expected to hold for the target respiratory/lung compartment, however with a higher level of unbound drug, due to interstitial albumin concentration being around 20–30% of that in the plasma [@ellmerer2000]. To capture the reported concentration dependent binding pattern, we follow [@emanuelsson1987; @emanuelsson1988] and specify the fraction unbound as $f_u =  \frac{f_{max} C_{t}}{f_{50} + C_{t}}$, with $f_{max}$ the maximum fraction of unbound drug, and $f_{50}$ is the drug concentration at which binding is half-maximum. Values for rats reported in [@emanuelsson1988] are $f_{max} = 0.5$ and $f_{50} = 120 \mu g / mL$ for the plasma compartment. While a higher value for $f_{max}$ is expected for the target compartment, we decided to use the reported value as a conservative value as a lower bound for the expected free drug concentration at the target site.  
-
-
-The PD functions describing the two effects are given by the following equations:
+While the total concentration of the drug in the target compartment is given by $C_t = A_t/V_t$, probenecid binds to albumin, and only the unbound fraction of the drug, $C_u = f_u C_t$ is assumed to have a pharmacodynamic effect. For the central/plasma compartment, it was shown that the unbound fraction is concentration dependent [@emanuelsson1987; @emanuelsson1988]. A similar pattern is expected to hold for the target respiratory/lung compartment. To capture the reported concentration dependent binding pattern, we follow [@emanuelsson1987; @emanuelsson1988] and specify the fraction unbound as $f_u =  \frac{f_{max} C_{t}}{f_{50} + C_{t}}$, with $f_{max}$ the maximum fraction of unbound drug, and $f_{50}$ is the drug concentration at which binding is half-maximum. Values for the plasma compartment in rats reported in [@emanuelsson1988] are $f_{max} = 0.5$ and $f_{50} = 0.12 mg / mL$ for the plasma compartment. While a higher value for $f_{max}$, and possibly also a lower value for $f_50$, are expected for the target compartment, due to interstitial albumin concentration being around 20–30% of that in the plasma [@ellmerer2000], no target-site specific estimates are available. We therefore decided to use the reported value as a conservative value as a lower bound for the expected free drug concentration at the target site.  
 
 $$
 \begin{aligned}
@@ -224,13 +220,13 @@ The model was implemented in R using the deSolve package [@soetaert10]. The mode
 ## Model calibration
 
 
-The model was fit to data for viral load, weight loss (used as a proxy for morbidity and symptoms), and IL-6 levels (used as a proxy for the innate inflammatory response) from the H5N1 mouse study. Fitting was performed simultaneously across all three treatment conditions (untreated, 10 mg, and 100 mg). The model fits to the data are shown in @fig-bestfit for the baseline values of the fixed parameters. The table of parameter estimates and model diagnostic plots (predicted versus observed, and residuals) are provided in the Supplement. Additional figures and tables showing equivalent results for all 100 samples of the fixed parameters are produced by the code included in the supplement and can be re-generated and inspected by interested readers, but are not shown.
+The model was fit to data for viral load, weight loss (used as a proxy for morbidity and symptoms), and IL-6 levels (used as a proxy for the innate inflammatory response) from the H5N1 mouse study. Fitting was performed simultaneously across all three treatment conditions (untreated, 10 mg, and 100 mg). The model fits to the data are shown in @fig-bestfit for the baseline values of the fixed parameters. The table of parameter estimates and model diagnostic plots (predicted versus observed, and residuals) are provided in the Supplement. Additional figures and tables showing equivalent results for all 100 samples of the fixed parameters can be produced with the code included in the supplement and can be generated by interested readers.
 
 
 
 ```{r}
 #| label: fig-bestfit
-#| fig-cap: "Best fit of model to the data. Circles, triangles and squares show data for those variables where it was available (virus load, innate immunity/IL-6, symptoms/weight loss) for untreated, 10mg and 100mg doses, respectively. Solid, dashed and dotted lines show the best fit of the model for the untreated, 10mg and 100mg doses, respectively. "
+#| fig-cap: "Best fit of model to the data. Circles, triangles and squares show data for the measured quantities (virus load, innate immunity/IL-6, symptoms/weight loss) for untreated, 10mg and 100mg doses, respectively. Solid, dashed and dotted lines show the best fit of the model for the untreated, 10mg and 100mg doses, respectively. "
 #| echo: FALSE
 knitr::include_graphics(here("results", "figures", "bestfit1.png"))
 ```

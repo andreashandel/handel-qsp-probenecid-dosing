@@ -39,6 +39,8 @@ simulate_model <- function(
   Q = 5,
   Vmax = 1.6,
   Km = 60,
+  fmax = 0.5,
+  f50 = 0.12,
   txstart = 1,
   txinterval = 0.5,
   txend = 4,
@@ -59,9 +61,11 @@ simulate_model <- function(
         dAt = Q / Vc * Ac - Q / Vt * At #taret site
 
         # drug PD
-        Ct = At / Vt #drug concentration in tissue compartment
-        f_V = Emax_V * Ct / (C50_V + Ct) #effect of drug on virus
-        f_F = Emax_F * Ct / (C50_F + Ct) #effect of drug on innate
+        Ct = At / Vt
+        fu = fmax * Ct / (f50 + Ct)
+        Cu = fu * Ct #drug concentration in tissue compartment
+        f_V = Emax_V * Cu / (C50_V + Cu) #effect of drug on virus
+        f_F = Emax_F * Cu / (C50_F + Cu) #effect of drug on innate
 
         # define system of ODEs
         dU = -b * U * V #uninfected cells
@@ -115,6 +119,8 @@ simulate_model <- function(
     Q = Q,
     Vmax = Vmax,
     Km = Km,
+    fmax = fmax,
+    f50 = f50,
     Ad0 = Ad0
   )
 
