@@ -212,6 +212,7 @@ maxtime = 10 * 60 * 60 #maximum time in seconds (h*m*s)
 ftol_rel = 1e-10
 tfinal = 7 #time of last data point
 dt = 0.02 # time step for which we want results returned
+nsamp = 20 # if this is 0, we only fit for the baseline values of the fixed parameters
 
 ##############
 # make samples for fixed parameters and re-fit for each sample
@@ -226,7 +227,6 @@ names(fixedpars) = fixedparsdata[, 1]
 samples_list <- list(fixedpars)
 
 # create a list of samples for fixed parameters ranging from half to double, uniformly sampled with LHS
-nsamp = 20 # if this is 0, we only fit for the baseline values of the fixed parameters
 set.seed(123) #for reproducibility of sampling and also for parallel fitting (which should not require randomness)
 if (nsamp > 0) {
   lower <- 0.5 * fixedpars
