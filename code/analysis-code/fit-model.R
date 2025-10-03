@@ -203,8 +203,8 @@ if (sum((par_ini - lb) < 0) > 0) {
 }
 
 #different solver types
-algname = "NLOPT_LN_COBYLA"
-#algname = "NLOPT_LN_NELDERMEAD"
+#algname = "NLOPT_LN_COBYLA"
+algname = "NLOPT_LN_NELDERMEAD"
 #algname = "NLOPT_LN_SBPLX"
 
 maxsteps = 1000 #number of steps/iterations for algorithm
@@ -226,7 +226,7 @@ names(fixedpars) = fixedparsdata[, 1]
 samples_list <- list(fixedpars)
 
 # create a list of samples for fixed parameters ranging from half to double, uniformly sampled with LHS
-nsamp = 0 # if this is 0, we only fit for the baseline values of the fixed parameters
+nsamp = 20 # if this is 0, we only fit for the baseline values of the fixed parameters
 set.seed(123) #for reproducibility of sampling and also for parallel fitting (which should not require randomness)
 if (nsamp > 0) {
   lower <- 0.5 * fixedpars

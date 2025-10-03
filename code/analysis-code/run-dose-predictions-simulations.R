@@ -16,8 +16,9 @@ nsamp <- length(bestfit_list)
 simres_list = vector("list", nsamp)
 
 
-# Parallel plan (Windows-safe)
-#workers <- max(1, parallel::detectCores(logical = TRUE) - 1)
+# Parallel plan
+# don't need a sequential plan here since I don't need diagnostics
+# can always initialize more workers and if nsamp is smaller, only a few are used
 workers <- 25
 plan(multisession, workers = workers)
 

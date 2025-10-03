@@ -11,12 +11,12 @@ source(here("code/analysis-code/model-simulator-function.R"))
 
 simulate_dose_predictions <- function(bestfit) {
   # doses for which time-series is saved
-  ts_doses <- c(1, 10, 100)
+  ts_doses <- c(1, 10, 100, 1000)
 
   # Model run parameters -------------------------------------------------------
   tfinal <- 7
-  dt <- 0.01
-  doses <- sort(unique(c(0, ts_doses, 10^seq(-3, 3, length = 20)))) #making sure we include ts_doses
+  dt <- 0.005
+  doses <- sort(unique(c(0, ts_doses, 10^seq(-3, 5, length = 100)))) #making sure we include ts_doses
 
   params <- bestfit$solution
   names(params) <- bestfit$fitparnames
