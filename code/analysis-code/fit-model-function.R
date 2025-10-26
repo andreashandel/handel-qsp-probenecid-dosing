@@ -3,8 +3,11 @@
 #this function specifies the objective function that the nloptr solver is minimizing
 #we are doing least squares fit here, but any function can be specified
 #NLOPTR will try to minimize whatever is being fit
-# required R packages for the function are loaded in the main script
 # it needs: nloptr, dplyr, deSolve (since it calls the simulator function)
+library(nloptr)
+library(dplyr)
+library(deSolve)
+
 
 ###################################################################
 # this function is set up to allow some parameters to be fitted (stored in params)

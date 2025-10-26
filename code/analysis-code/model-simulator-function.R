@@ -2,8 +2,8 @@
 #initial conditions and parameter values, as well as drug treatment information and time
 #is passed in to the function
 #the function returns a time-series with the solution of the ODE
-# required R packages for the function are loaded in the main script
 # it needs: deSolve
+library(deSolve)
 
 simulate_model <- function(
   Ad = 0,

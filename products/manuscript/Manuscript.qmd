@@ -112,7 +112,7 @@ The following sections describe each model component in detail.
 
 ### Pharmacokinetics (PK) component
 
-Our pharmacokinetic model for probenecid includes some of the known drug characteristics, while also keeping the overall model parsimonious. We model the 3 physiologically relevant sites, namely the oral depot, central compartment, and peripheral compartment (respiratory tract and lung). 
+Our pharmacokinetic model for probenecid includes some of the known drug characteristics, while also keeping the overall model parsimonious. We model the oral depot and 2 physiological sites, namely the central compartment and peripheral compartment (respiratory tract and lung). 
 
 Drug of amount $A_0$ is deposited orally at treatment times, $T_x$, into the depot compartment, $A_d$, and absorbed into the central compartment at rate $k_a$. The fraction that is bioavailable in the central compartment is denoted by $F_b$. 
 

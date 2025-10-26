@@ -207,12 +207,12 @@ if (sum((par_ini - lb) < 0) > 0) {
 algname = "NLOPT_LN_NELDERMEAD"
 #algname = "NLOPT_LN_SBPLX"
 
-maxsteps = 1000 #number of steps/iterations for algorithm
+maxsteps = 2000 #number of steps/iterations for algorithm
 maxtime = 10 * 60 * 60 #maximum time in seconds (h*m*s)
 ftol_rel = 1e-10
 tfinal = 7 #time of last data point
 dt = 0.02 # time step for which we want results returned
-nsamp = 20 # if this is 0, we only fit for the baseline values of the fixed parameters
+nsamp = 49 # if this is 0, we only fit for the baseline values of the fixed parameters
 
 ##############
 # make samples for fixed parameters and re-fit for each sample

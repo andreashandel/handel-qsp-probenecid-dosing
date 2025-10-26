@@ -1,8 +1,10 @@
 ################################
 # Packages needed are
 # ggplot2, dplyr, patchwork
-# they are loaded in the script(s) calling this function
 ################################
+library(ggplot2)
+library(dplyr)
+library(patchwork)
 
 ################################
 # Time-series plotting function
@@ -71,6 +73,8 @@ plot_timeseries <- function(data = NULL, modelfit, tmax = 7, dose_levels) {
         show.legend = keep_legend # <- only this panel feeds the legend
       ) +
       labs(x = NULL, y = ylabel) +
+      # reduce size of y-axis labels
+      theme(axis.text.y = element_text(size = 10)) +
 
       ## ---- single combined legend comes from the colour scale --------------
       scale_colour_manual(
@@ -124,7 +128,8 @@ plot_timeseries <- function(data = NULL, modelfit, tmax = 7, dose_levels) {
         axis.title.y = element_text(size = 14),
         legend.position = "none" # legends collected by patchwork      )
       )
-    p
+
+    return(p)
   }
 
   ## -------------------------------------------------------------------------
@@ -158,7 +163,7 @@ plot_timeseries <- function(data = NULL, modelfit, tmax = 7, dose_levels) {
     "V",
     "Virus Load",
     logy = TRUE,
-    ylimits = c(1e-2, 1e10),
+    ylimits = c(1e-2, 1e11),
     tmax = tmax
   )
   p_inn <- plot_template(

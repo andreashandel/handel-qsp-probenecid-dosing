@@ -3,7 +3,10 @@
 ##############################
 # packages needed by this function are
 # ggplot2, dplyr, patchwork, tidyr
-# those are loaded in the calling scripts
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+library(tidyr)
 
 plot_outcomes <- function(df_list, scenarios) {
   ## --- Colour-blind-safe palette (blue, bluish-green, vermillion) ----------
@@ -98,6 +101,7 @@ plot_outcomes <- function(df_list, scenarios) {
       scale_color_manual(values = col_vals) +
       scale_fill_manual(values = col_vals) +
       scale_linetype_manual(values = linetype_vals) +
+      scale_y_continuous(limits = c(0, 100)) +
       scale_x_log10(breaks = c(1e-3, 1e-1, 1e1, 1e3)) +
       labs(
         x = NULL,

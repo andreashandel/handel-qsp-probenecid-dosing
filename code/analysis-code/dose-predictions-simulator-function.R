@@ -2,9 +2,11 @@
 # function that runs the model over a wide range of dosing values
 # and dosing schedules, and for each computes reduction
 # in virus load, innate symptoms and weight loss
-# required R packages for the function are loaded in the calling script(s)
 # it needs: deSolve (since it calls the simulator function), dplyr, caTools
 #############################################################################
+library(deSolve)
+library(dplyr)
+library(caTools)
 
 # load model simulator function
 source(here("code/analysis-code/model-simulator-function.R"))

@@ -4,7 +4,9 @@
 ############################################
 ##  Packages
 ############################################
-library(tidyverse) # dplyr, tidyr, ggplot2, readr, …
+library(ggplot2)
+library(dplyr)
+library(tidyr)
 library(patchwork) # for combining ggplot objects
 library(here) # for file paths
 library(grid) # for a custom x-axis label
