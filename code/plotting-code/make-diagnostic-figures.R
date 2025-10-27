@@ -33,7 +33,7 @@ for (i in 1:nsamp) {
     filter(time %in% times_to_keep) %>% # keep only matching times
     select(time, Scenario, V, F, S) %>% # keep relevant columns
     mutate(
-      V = log10(V + 1e-12)
+      V = log10(pmax(1, V))
     ) %>%
     rename(Day = time, LogVirusLoad = V, IL6 = F, Weight = S) %>%
     pivot_longer(

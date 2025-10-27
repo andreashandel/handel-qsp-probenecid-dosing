@@ -32,10 +32,17 @@ s1_ts <- all_ts |>
   filter(Schedule == "s1") |>
   mutate(Dose = ifelse(Dose == 1, 0, Dose))
 
-dose_levels <- c("1 mg/kg", "10 mg/kg", "100 mg/kg")
+dose_levels = c(1, 10, 100, 1000)
+dose_levels_labels <- c("1 mg/kg", "10 mg/kg", "100 mg/kg", "1000 mg/kg")
 
 
-s1plot <- plot_timeseries(data = NULL, modelfit = s1_ts, tmax = 7, dose_levels)
+s1plot <- plot_timeseries(
+  data = NULL,
+  modelfit = s1_ts,
+  tmax = 7,
+  dose_levels,
+  dose_levels_labels
+)
 plot(s1plot)
 png(
   here::here('results', 'figures', 'timeseries-baseline.png'),
@@ -51,7 +58,13 @@ dev.off()
 s2_ts <- all_ts |>
   filter(Schedule == "s2") |>
   mutate(Dose = ifelse(Dose == 1, 0, Dose))
-s2plot <- plot_timeseries(data = NULL, modelfit = s2_ts, tmax = 7, dose_levels)
+s2plot <- plot_timeseries(
+  data = NULL,
+  modelfit = s2_ts,
+  tmax = 7,
+  dose_levels,
+  dose_levels_labels
+)
 plot(s2plot)
 png(
   here::here('results', 'figures', 'timeseries-d2tx.png'),
@@ -67,7 +80,13 @@ dev.off()
 s3_ts <- all_ts |>
   filter(Schedule == "s3") |>
   mutate(Dose = ifelse(Dose == 1, 0, Dose))
-s3plot <- plot_timeseries(data = NULL, modelfit = s3_ts, tmax = 7, dose_levels)
+s3plot <- plot_timeseries(
+  data = NULL,
+  modelfit = s3_ts,
+  tmax = 7,
+  dose_levels,
+  dose_levels_labels
+)
 plot(s3plot)
 png(
   here::here('results', 'figures', 'timeseries-d3tx.png'),
@@ -83,7 +102,13 @@ dev.off()
 s4_ts <- all_ts |>
   filter(Schedule == "s4") |>
   mutate(Dose = ifelse(Dose == 1, 0, Dose))
-s4plot <- plot_timeseries(data = NULL, modelfit = s4_ts, tmax = 7, dose_levels)
+s4plot <- plot_timeseries(
+  data = NULL,
+  modelfit = s4_ts,
+  tmax = 7,
+  dose_levels,
+  dose_levels_labels
+)
 plot(s4plot)
 png(
   here::here('results', 'figures', 'timeseries-dailytx.png'),
@@ -99,7 +124,13 @@ dev.off()
 s5_ts <- all_ts |>
   filter(Schedule == "s5") |>
   mutate(Dose = ifelse(Dose == 1, 0, Dose))
-s5plot <- plot_timeseries(data = NULL, modelfit = s5_ts, tmax = 7, dose_levels)
+s5plot <- plot_timeseries(
+  data = NULL,
+  modelfit = s5_ts,
+  tmax = 7,
+  dose_levels,
+  dose_levels_labels
+)
 plot(s5plot)
 png(
   here::here('results', 'figures', 'timeseries-singletx.png'),

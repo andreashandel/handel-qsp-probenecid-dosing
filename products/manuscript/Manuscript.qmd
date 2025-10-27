@@ -302,7 +302,7 @@ knitr::include_graphics(here(
 # Discussion
 
 
-This work presents what is, to our knowledge, the first influenza-specific QSP model that integrates probenecid pharmacokinetics and dual antiviral/anti-inflammatory pharmacodynamics with host-virus interactions. The framework extends earlier influenza PK/PD and viral-dynamics models [@canini14a; @petrie2013] by explicitly linking drug concentrations to simultaneous suppression of viral production and innate-immune cytokine induction.
+This work presents what is, to our knowledge, the first QSP model that integrates probenecid pharmacokinetics and dual antiviral/anti-inflammatory pharmacodynamics with host-virus interactions to model influenza infections. The framework extends earlier influenza PK/PD and viral-dynamics models [@canini14a; @petrie2013] by explicitly linking drug concentrations to simultaneous suppression of viral production and innate-immune cytokine induction.
 
 Model simulations showed that the impacts of dose on the viral load, immune response and symptoms were strongly nonlinear. The ranges for which dose has a strong or weak impact differed between outcomes. Although less frequent dosing, such as daily dosing, might be lead to very minor reduction in drug efficacy, we also found that even large dose escalations cannot fully restore efficacy when therapy is delayed, echoing findings from studies with zanamivir and baloxavir [@hayden96; @ison2020]. 
 

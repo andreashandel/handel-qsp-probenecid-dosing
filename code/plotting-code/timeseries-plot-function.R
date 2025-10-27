@@ -9,7 +9,13 @@ library(patchwork)
 ################################
 # Time-series plotting function
 ################################
-plot_timeseries <- function(data = NULL, modelfit, tmax = 7, dose_levels) {
+plot_timeseries <- function(
+  data = NULL,
+  modelfit,
+  tmax = 7,
+  dose_levels,
+  dose_levels_labels
+) {
   ## -------------------------------------------------------------------------
   ## Aesthetics and labels
   ## -------------------------------------------------------------------------
@@ -21,11 +27,15 @@ plot_timeseries <- function(data = NULL, modelfit, tmax = 7, dose_levels) {
   ## Ensure Dose is a factor with the desired labels
   ## -------------------------------------------------------------------------
   modelfit <- modelfit %>%
-    mutate(Dose = factor(Dose, levels = c(0, 10, 100), labels = dose_levels))
+    mutate(
+      Dose = factor(Dose, levels = dose_levels_labels)
+    )
 
   if (!is.null(data) && nrow(data) > 0) {
     data <- data %>%
-      mutate(Dose = factor(Dose, levels = c(0, 10, 100), labels = dose_levels))
+      mutate(
+        Dose = factor(Dose, levels = dose_levels_labels)
+      )
 
     Vvals <- data %>%
       filter(Quantity == "LogVirusLoad") %>%
@@ -73,23 +83,21 @@ plot_timeseries <- function(data = NULL, modelfit, tmax = 7, dose_levels) {
         show.legend = keep_legend # <- only this panel feeds the legend
       ) +
       labs(x = NULL, y = ylabel) +
-      # reduce size of y-axis labels
-      theme(axis.text.y = element_text(size = 10)) +
 
       ## ---- single combined legend comes from the colour scale --------------
       scale_colour_manual(
         name = "Scenario", # legend title
-        values = setNames(color_vals, dose_levels),
+        values = setNames(color_vals, dose_levels_labels),
         breaks = dose_levels,
         guide = colour_guide # <- legend only on the chosen panel
       ) +
       ## hide separate linetype & shape legends
       scale_linetype_manual(
-        values = setNames(linetype_vals, dose_levels),
+        values = setNames(linetype_vals, dose_levels_labels),
         guide = "none"
       ) +
       scale_shape_manual(
-        values = setNames(shape_vals, dose_levels),
+        values = setNames(shape_vals, dose_levels_labels),
         guide = "none"
       )
 
@@ -125,7 +133,7 @@ plot_timeseries <- function(data = NULL, modelfit, tmax = 7, dose_levels) {
         axis.text.x = element_text(size = 12),
         axis.text.y = element_text(size = 12),
         legend.key.width = unit(2, "cm"),
-        axis.title.y = element_text(size = 14),
+        axis.title.y = element_text(size = 10),
         legend.position = "none" # legends collected by patchwork      )
       )
 
@@ -201,7 +209,7 @@ plot_timeseries <- function(data = NULL, modelfit, tmax = 7, dose_levels) {
     NULL,
     "time",
     "Ad",
-    "Drug depot compartment",
+    "Drug depot",
     logy = TRUE,
     ylimits = c(1e-5, 1e1),
     tmax = tmax
@@ -211,7 +219,7 @@ plot_timeseries <- function(data = NULL, modelfit, tmax = 7, dose_levels) {
     NULL,
     "time",
     "Ac",
-    "Drug central compartment",
+    "Drug central",
     logy = TRUE,
     ylimits = c(1e-5, 1e0),
     tmax = tmax
@@ -221,7 +229,7 @@ plot_timeseries <- function(data = NULL, modelfit, tmax = 7, dose_levels) {
     NULL,
     "time",
     "At",
-    "Drug target compartment",
+    "Drug target",
     logy = TRUE,
     ylimits = c(1e-6, 1e-1),
     tmax = tmax
