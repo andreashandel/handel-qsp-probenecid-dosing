@@ -11,9 +11,9 @@ library(caTools)
 # load model simulator function
 source(here("code/analysis-code/model-simulator-function.R"))
 
-simulate_dose_predictions <- function(bestfit) {
+simulate_dose_predictions <- function(bestfit, ts_doses = c(1, 10, 100, 1000)) {
   # doses for which time-series is saved
-  ts_doses <- c(1, 10, 100, 1000)
+  ts_doses <- sort(unique(ts_doses))
 
   # Model run parameters -------------------------------------------------------
   tfinal <- 7
@@ -157,7 +157,8 @@ simulate_dose_predictions <- function(bestfit) {
   allres = list(
     all_results_df = all_results_df,
     reduction_df = reduction_df,
-    timeseries_df = timeseries_df
+    timeseries_df = timeseries_df,
+    ts_doses = ts_doses
   )
 
   return(allres)
