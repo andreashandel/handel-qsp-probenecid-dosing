@@ -13,29 +13,72 @@ plot_timeseries <- function(
   data = NULL,
   modelfit,
   tmax = 7,
-  dose_levels,
-  dose_levels_labels
+  dose_levels = NULL,
+  dose_levels_labels = NULL
 ) {
   ## -------------------------------------------------------------------------
   ## Aesthetics and labels
   ## -------------------------------------------------------------------------
-  color_vals <- c("#0072B2", "#009E73", "#D55E00") # Okabe–Ito colours
-  linetype_vals <- c("solid", "42", "12") #F4 means length of dashes, 10 means frequency of dot
-  shape_vals <- c(16, 17, 15)
+  okabe_ito <- c(
+    "#0072B2", "#009E73", "#D55E00", "#E69F00",
+    "#56B4E9", "#F0E442", "#CC79A7", "#000000"
+  )
+  color_vals <- NULL
+  linetype_base <- c("solid", "42", "12", "13", "F4", "F2")
+  shape_base <- c(16, 17, 15, 18, 19, 8)
+
+  ## determine dose ordering and labels --------------------------------------
+  infer_doses <- function(df) {
+    if (!is.null(df) && nrow(df) > 0 && "Dose" %in% names(df)) {
+      return(df$Dose)
+    }
+    numeric(0)
+  }
+
+  if (is.null(dose_levels)) {
+    candidate_levels <- sort(unique(c(infer_doses(modelfit), infer_doses(data))))
+    if (!length(candidate_levels)) {
+      stop("Unable to infer dose levels; please provide `dose_levels` explicitly.")
+    }
+    dose_levels <- candidate_levels
+  }
+
+  dose_levels <- sort(unique(as.numeric(dose_levels)))
+
+  if (is.null(dose_levels_labels)) {
+    dose_levels_labels <- vapply(
+      dose_levels,
+      function(d) {
+        if (isTRUE(all.equal(d, 0))) {
+          "no drug"
+        } else {
+          paste0(format(d, trim = TRUE, scientific = FALSE), " mg/kg")
+        }
+      },
+      character(1)
+    )
+  } else if (length(dose_levels_labels) != length(dose_levels)) {
+    stop("`dose_levels` and `dose_levels_labels` must have the same length.")
+  }
+
+  color_vals <- rep(okabe_ito, length.out = length(dose_levels_labels))
+  linetype_vals <- rep(linetype_base, length.out = length(dose_levels_labels))
+  shape_vals <- rep(shape_base, length.out = length(dose_levels_labels))
+
+  recode_dose <- function(df) {
+    if (is.null(df) || !nrow(df)) {
+      return(df)
+    }
+    df %>% mutate(Dose = factor(Dose, levels = dose_levels, labels = dose_levels_labels))
+  }
 
   ## -------------------------------------------------------------------------
   ## Ensure Dose is a factor with the desired labels
   ## -------------------------------------------------------------------------
-  modelfit <- modelfit %>%
-    mutate(
-      Dose = factor(Dose, levels = dose_levels_labels)
-    )
+  modelfit <- recode_dose(modelfit)
 
   if (!is.null(data) && nrow(data) > 0) {
-    data <- data %>%
-      mutate(
-        Dose = factor(Dose, levels = dose_levels_labels)
-      )
+    data <- recode_dose(data)
 
     Vvals <- data %>%
       filter(Quantity == "LogVirusLoad") %>%
@@ -86,9 +129,9 @@ plot_timeseries <- function(
 
       ## ---- single combined legend comes from the colour scale --------------
       scale_colour_manual(
-        name = "Scenario", # legend title
+        name = "Dose", # legend title
         values = setNames(color_vals, dose_levels_labels),
-        breaks = dose_levels,
+        breaks = dose_levels_labels,
         guide = colour_guide # <- legend only on the chosen panel
       ) +
       ## hide separate linetype & shape legends

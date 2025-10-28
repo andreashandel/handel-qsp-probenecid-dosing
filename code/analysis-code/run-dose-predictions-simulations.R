@@ -15,6 +15,9 @@ bestfit_list <- readRDS(here("results", "output", "bestfit.Rds"))
 nsamp <- length(bestfit_list)
 simres_list = vector("list", nsamp)
 
+# select doses for which full time-series trajectories will be recorded
+timeseries_doses <- c(1, 10, 100, 1000)
+
 
 # Parallel plan
 # don't need a sequential plan here since I don't need diagnostics
@@ -28,13 +31,17 @@ simres_list <- future_lapply(
   function(i) {
     message(sprintf("processing sample %d", i)) # logs may print slightly out of order
     bestfit <- bestfit_list[[i]]
-    simulate_dose_predictions(bestfit)
+    simulate_dose_predictions(bestfit, ts_doses = timeseries_doses)
   },
   future.seed = TRUE
 )
 
 # switch back to sequential when done
 plan(sequential)
+
+
+# attach the selected doses as metadata for downstream scripts
+attr(simres_list, "ts_doses") <- timeseries_doses
 
 
 saveRDS(
