@@ -11,7 +11,7 @@ library(caTools)
 # load model simulator function
 source(here("code/analysis-code/model-simulator-function.R"))
 
-simulate_dose_predictions <- function(bestfit, ts_doses = c(1, 10, 100, 1000)) {
+simulate_dose_predictions <- function(bestfit, ts_doses) {
   # doses for which time-series is saved
   ts_doses <- sort(unique(ts_doses))
 

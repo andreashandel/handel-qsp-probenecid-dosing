@@ -16,7 +16,7 @@ nsamp <- length(bestfit_list)
 simres_list = vector("list", nsamp)
 
 # select doses for which full time-series trajectories will be recorded
-timeseries_doses <- c(1, 10, 100, 1000)
+timeseries_doses <- c(1, 10, 100, 500)
 
 
 # Parallel plan
