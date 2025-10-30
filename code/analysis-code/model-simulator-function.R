@@ -135,8 +135,8 @@ simulate_model <- function(
     func = odemodel,
     events = list(func = adddrug, time = drugtimes),
     parms = pars,
-    atol = 1e-8,
-    rtol = 1e-8
+    atol = 1e-10,
+    rtol = 1e-10
   )
 
   return(odeoutput)

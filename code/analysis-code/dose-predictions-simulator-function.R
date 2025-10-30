@@ -18,7 +18,7 @@ simulate_dose_predictions <- function(bestfit, ts_doses) {
   # Model run parameters -------------------------------------------------------
   tfinal <- 7
   dt <- 0.005
-  doses <- sort(unique(c(0, ts_doses, 10^seq(-3, 5, length = 100)))) #making sure we include ts_doses
+  doses <- sort(unique(c(0, ts_doses, 10^seq(-2, 5, length = 100)))) #making sure we include ts_doses
 
   params <- bestfit$solution
   names(params) <- bestfit$fitparnames
