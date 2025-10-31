@@ -105,7 +105,7 @@ for (i in 1:nsamp) {
   var_labs <- c(
     LogVirusLoad = "Log Virus Load",
     IL6 = "IL-6",
-    Weight = "Weight"
+    Weight = "Weight Loss"
   )
 
   ###################################
@@ -192,7 +192,7 @@ for (i in 1:nsamp) {
   ###################################
   # 6.  Unweighted residual plot (original definition)
   ###################################
-  unweighted_plot <- build_combined_residual_plot(resid_df, "Residual")
+  unweighted_plot <- build_combined_residual_plot(resid_df, "Residuals")
 
   print(unweighted_plot)
   grid.text("Time (days)", y = unit(0.02, "npc"), gp = gpar(fontsize = 14))
@@ -216,7 +216,7 @@ for (i in 1:nsamp) {
 
   weighted_plot <- build_combined_residual_plot(
     weighted_resid_df,
-    "Weighted Residual"
+    "Weighted Residuals"
   )
 
   print(weighted_plot)
@@ -270,17 +270,17 @@ for (i in 1:nsamp) {
     geom_point(alpha = 0.85, size = 2) +
     scale_color_manual(
       values = var_colors,
-      name = "Variable:",
+      name = "Variable:\n(Measurement)",
       labels = var_labs
     ) +
     scale_shape_manual(
       values = shape_vals, # uses the shapes you defined earlier for scenarios
-      name = "Dose level:",
+      name = "Dose level:\n(Scenario)",
       labels = scen_labs
     ) +
     scale_y_continuous(limits = y_limits, expand = expansion(mult = 0)) +
     xlab("Time (days)") +
-    ylab("Weighted Residual") +
+    ylab("Weighted Residuals") +
     theme_bw(base_size = 14) +
     theme(
       legend.position = "top",

@@ -8,7 +8,29 @@ library(dplyr)
 library(patchwork)
 library(tidyr)
 
-plot_outcomes <- function(df_list, scenarios) {
+plot_outcomes <- function(
+  df_list,
+  scenarios,
+  x_limits = NULL,
+  x_breaks = c(1e-3, 1e-1, 1e1, 1e3)
+) {
+  if (!is.null(x_limits)) {
+    if (!is.numeric(x_limits) || length(x_limits) != 2L) {
+      stop("`x_limits` must be a numeric vector of length 2.")
+    }
+    if (any(!is.finite(x_limits)) || any(x_limits <= 0)) {
+      stop("`x_limits` values must be positive and finite for the log-scale axis.")
+    }
+    if (x_limits[1] >= x_limits[2]) {
+      stop("`x_limits` must be in increasing order (min, max).")
+    }
+  }
+
+  if (!is.null(x_breaks)) {
+    if (any(!is.finite(x_breaks)) || any(x_breaks <= 0)) {
+      stop("`x_breaks` values must be positive and finite for the log-scale axis.")
+    }
+  }
   ## --- Colour-blind-safe palette (blue, bluish-green, vermillion) ----------
   base_pal <- c("#0072B2", "#009E73", "#D55E00")
 
@@ -102,7 +124,7 @@ plot_outcomes <- function(df_list, scenarios) {
       scale_fill_manual(values = col_vals) +
       scale_linetype_manual(values = linetype_vals) +
       scale_y_continuous(limits = c(0, 100)) +
-      scale_x_log10(breaks = c(1e-3, 1e-1, 1e1, 1e3)) +
+      scale_x_log10(limits = x_limits, breaks = x_breaks) +
       labs(
         x = NULL,
         y = ylab,

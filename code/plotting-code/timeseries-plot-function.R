@@ -90,6 +90,80 @@ plot_timeseries <- function(
   }
 
   ## -------------------------------------------------------------------------
+  ## Determine dynamic y-axis limits so all trajectories remain visible
+  ## -------------------------------------------------------------------------
+  collect_values <- function(var_name, df_point = NULL) {
+    line_vals <- modelfit[[var_name]]
+    extra_vals <- if (!is.null(df_point)) df_point$Value else numeric(0)
+    vals <- c(line_vals, extra_vals)
+    vals[is.finite(vals)]
+  }
+
+  compute_limits <- function(var_name, logy = FALSE, df_point = NULL, clamp_zero = FALSE) {
+    vals <- collect_values(var_name, df_point)
+    if (!length(vals)) {
+      return(NULL)
+    }
+
+    if (logy) {
+      pos_vals <- vals[vals > 0]
+      if (!length(pos_vals)) {
+        warning(
+          sprintf(
+            "All values for '%s' are non-positive; using a default log10 range.",
+            var_name
+          )
+        )
+        return(c(1e-8, 1))
+      }
+      min_val <- min(pos_vals)
+      max_val <- max(pos_vals)
+      if (min_val == max_val) {
+        lower <- min_val / 2
+        upper <- max_val * 2
+      } else {
+        lower <- min_val / 1.5
+        upper <- max_val * 1.25
+      }
+      lower <- max(lower, min_val / 10)
+      lower <- max(lower, 1e-8)
+      upper <- max(upper, lower * 1.1)
+      c(lower, upper)
+    } else {
+      min_val <- min(vals)
+      max_val <- max(vals)
+      if (min_val == max_val) {
+        pad <- ifelse(min_val == 0, 1, abs(min_val) * 0.1)
+      } else {
+        pad <- (max_val - min_val) * 0.1
+      }
+      if (!is.finite(pad) || pad == 0) {
+        pad <- 1
+      }
+      lower <- min_val - pad
+      upper <- max_val + pad
+      if (clamp_zero && min_val >= 0) {
+        lower <- 0
+      }
+      if (lower == upper) {
+        lower <- lower - 1
+        upper <- upper + 1
+      }
+      c(lower, upper)
+    }
+  }
+
+  uc_limits <- compute_limits("U", logy = TRUE)
+  ic_limits <- compute_limits("I", logy = TRUE)
+  vir_limits <- compute_limits("V", logy = TRUE, df_point = Vvals)
+  inn_limits <- compute_limits("F", df_point = Innvals, clamp_zero = TRUE)
+  ada_limits <- compute_limits("A", logy = TRUE)
+  sym_limits <- compute_limits("S", df_point = Symvals, clamp_zero = TRUE)
+  ad_limits <- compute_limits("Ad", logy = TRUE)
+  ac_limits <- compute_limits("Ac", logy = TRUE)
+  at_limits <- compute_limits("At", logy = TRUE)
+
+  ## -------------------------------------------------------------------------
   ## Re-usable panel builder
   ## -------------------------------------------------------------------------
   plot_template <- function(
@@ -158,9 +232,13 @@ plot_timeseries <- function(
 
     ## y-axis scaling
     if (logy) {
-      p <- p + scale_y_log10(limits = ylimits)
+      if (is.null(ylimits)) {
+        p <- p + scale_y_log10(expand = expansion(mult = c(0, 0.05)))
+      } else {
+        p <- p + scale_y_log10(limits = ylimits, expand = expansion(mult = c(0, 0.05)))
+      }
     } else if (!is.null(ylimits)) {
-      p <- p + scale_y_continuous(limits = ylimits)
+      p <- p + scale_y_continuous(limits = ylimits, expand = expansion(mult = c(0, 0.05)))
     }
 
     ## x-axis settings
@@ -177,7 +255,7 @@ plot_timeseries <- function(
         axis.text.y = element_text(size = 12),
         legend.key.width = unit(2, "cm"),
         axis.title.y = element_text(size = 10),
-        legend.position = "none" # legends collected by patchwork      )
+        legend.position = "none" # legends collected by patchwork
       )
 
     return(p)
@@ -193,7 +271,7 @@ plot_timeseries <- function(
     "U",
     "Uninfected Cells",
     logy = TRUE,
-    ylimits = c(1e2, 1e7),
+    ylimits = uc_limits,
     tmax = tmax,
     keep_legend = TRUE
   )
@@ -204,7 +282,7 @@ plot_timeseries <- function(
     "I",
     "Infected Cells",
     logy = TRUE,
-    ylimits = c(1e-2, 1e10),
+    ylimits = ic_limits,
     tmax = tmax
   )
   p_vir <- plot_template(
@@ -214,7 +292,7 @@ plot_timeseries <- function(
     "V",
     "Virus Load",
     logy = TRUE,
-    ylimits = c(1e-2, 1e11),
+    ylimits = vir_limits,
     tmax = tmax
   )
   p_inn <- plot_template(
@@ -224,7 +302,7 @@ plot_timeseries <- function(
     "F",
     "Innate Response (IL-6)",
     logy = FALSE,
-    ylimits = c(0, 2),
+    ylimits = inn_limits,
     tmax = tmax
   )
   p_ada <- plot_template(
@@ -234,7 +312,7 @@ plot_timeseries <- function(
     "A",
     "Adaptive Response",
     logy = TRUE,
-    ylimits = c(1e-2, 1e10),
+    ylimits = ada_limits,
     tmax = tmax
   )
   p_sym <- plot_template(
@@ -244,7 +322,7 @@ plot_timeseries <- function(
     "S",
     "Morbidity (weight loss)",
     logy = FALSE,
-    ylimits = c(0, 30),
+    ylimits = sym_limits,
     tmax = tmax
   )
   p_ad <- plot_template(
@@ -254,7 +332,7 @@ plot_timeseries <- function(
     "Ad",
     "Drug depot",
     logy = TRUE,
-    ylimits = c(1e-5, 1e1),
+    ylimits = ad_limits,
     tmax = tmax
   )
   p_ac <- plot_template(
@@ -264,7 +342,7 @@ plot_timeseries <- function(
     "Ac",
     "Drug central",
     logy = TRUE,
-    ylimits = c(1e-5, 1e0),
+    ylimits = ac_limits,
     tmax = tmax
   )
   p_at <- plot_template(
@@ -274,7 +352,7 @@ plot_timeseries <- function(
     "At",
     "Drug target",
     logy = TRUE,
-    ylimits = c(1e-6, 1e-1),
+    ylimits = at_limits,
     tmax = tmax
   )
 
