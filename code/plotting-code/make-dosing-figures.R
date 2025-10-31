@@ -21,14 +21,26 @@ dose_response_list = readRDS(here::here(
 
 
 # ---- Generate Figures ----
-fig1 <- plot_outcomes(dose_response_list, scenarios = "baseline")
+# Custom x-axis ranges (dose in mg/kg) for each figure. Adjust as needed.
+x_axis_ranges <- list(
+  baseline = c(1e-3, 1e3),
+  txstart = c(1e-3, 1e3),
+  txinterval = c(1e-3, 1e3)
+)
+
+fig1 <- plot_outcomes(
+  dose_response_list,
+  scenarios = "baseline",
+  x_limits = x_axis_ranges$baseline
+)
 print(fig1)
 filename = here("results", "figures", "dose-response-baseline.png")
 ggsave(filename, fig1, width = 12, height = 4)
 
 fig2 <- plot_outcomes(
   dose_response_list,
-  scenarios = c("baseline", "d2 start", "d3 start")
+  scenarios = c("baseline", "d2 start", "d3 start"),
+  x_limits = x_axis_ranges$txstart
 )
 print(fig2)
 filename = here("results", "figures", "dose-response-txstart.png")
@@ -36,7 +48,8 @@ ggsave(filename, fig2, width = 12, height = 4)
 
 fig3 <- plot_outcomes(
   dose_response_list,
-  scenarios = c("baseline", "daily tx", "single tx")
+  scenarios = c("baseline", "daily tx", "single tx"),
+  x_limits = x_axis_ranges$txinterval
 )
 print(fig3)
 filename = here("results", "figures", "dose-response-txinterval.png")
