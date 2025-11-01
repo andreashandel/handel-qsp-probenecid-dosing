@@ -14,18 +14,37 @@ plot_timeseries <- function(
   modelfit,
   tmax = 7,
   dose_levels = NULL,
-  dose_levels_labels = NULL
+  dose_levels_labels = NULL,
+  x_jitter = 0,
+  # Optional RNG seed so jitter is reproducible; set to a number (e.g., 123) or leave NULL.
+  x_jitter_seed = 123
 ) {
   ## -------------------------------------------------------------------------
   ## Aesthetics and labels
   ## -------------------------------------------------------------------------
   okabe_ito <- c(
-    "#0072B2", "#009E73", "#D55E00", "#E69F00",
-    "#56B4E9", "#F0E442", "#CC79A7", "#000000"
+    "#0072B2",
+    "#009E73",
+    "#D55E00",
+    "#E69F00",
+    "#56B4E9",
+    "#F0E442",
+    "#CC79A7",
+    "#000000"
   )
   color_vals <- NULL
   linetype_base <- c("solid", "42", "12", "13", "F4", "F2")
   shape_base <- c(16, 17, 15, 18, 19, 8)
+
+  # --- NEW: build a reusable position object for points (x-only jitter) ------
+  # If x_jitter == 0, no jitter is applied. Otherwise, apply horizontal jitter
+  # with the requested width and no vertical jitter. Using 'seed' makes jitter
+  # reproducible across calls/panels.
+  point_pos <- if (x_jitter > 0) {
+    position_jitter(width = x_jitter, height = 0, seed = x_jitter_seed)
+  } else {
+    position_identity()
+  }
 
   ## determine dose ordering and labels --------------------------------------
   infer_doses <- function(df) {
@@ -36,9 +55,14 @@ plot_timeseries <- function(
   }
 
   if (is.null(dose_levels)) {
-    candidate_levels <- sort(unique(c(infer_doses(modelfit), infer_doses(data))))
+    candidate_levels <- sort(unique(c(
+      infer_doses(modelfit),
+      infer_doses(data)
+    )))
     if (!length(candidate_levels)) {
-      stop("Unable to infer dose levels; please provide `dose_levels` explicitly.")
+      stop(
+        "Unable to infer dose levels; please provide `dose_levels` explicitly."
+      )
     }
     dose_levels <- candidate_levels
   }
@@ -69,7 +93,10 @@ plot_timeseries <- function(
     if (is.null(df) || !nrow(df)) {
       return(df)
     }
-    df %>% mutate(Dose = factor(Dose, levels = dose_levels, labels = dose_levels_labels))
+    df %>%
+      mutate(
+        Dose = factor(Dose, levels = dose_levels, labels = dose_levels_labels)
+      )
   }
 
   ## -------------------------------------------------------------------------
@@ -84,7 +111,7 @@ plot_timeseries <- function(
       filter(Quantity == "LogVirusLoad") %>%
       mutate(Value = 10^Value)
     Innvals <- data %>% filter(Quantity == "IL6")
-    Symvals <- data %>% filter(Quantity == "Weight")
+    Symvals <- data %>% filter(Quantity == "WeightLossPerc")
   } else {
     Vvals <- Innvals <- Symvals <- NULL
   }
@@ -99,7 +126,12 @@ plot_timeseries <- function(
     vals[is.finite(vals)]
   }
 
-  compute_limits <- function(var_name, logy = FALSE, df_point = NULL, clamp_zero = FALSE) {
+  compute_limits <- function(
+    var_name,
+    logy = FALSE,
+    df_point = NULL,
+    clamp_zero = FALSE
+  ) {
     vals <- collect_values(var_name, df_point)
     if (!length(vals)) {
       return(NULL)
@@ -224,9 +256,10 @@ plot_timeseries <- function(
         geom_point(
           data = df_point,
           aes(x = xvals, y = Value, colour = Dose, shape = Dose),
-          size = 2.0,
-          alpha = 0.4,
-          show.legend = FALSE # <- crucial: no separate shape legend
+          size = 1,
+          alpha = 1,
+          show.legend = FALSE, # no separate shape legend
+          position = point_pos # <-- NEW: x-only jitter applied here
         )
     }
 
@@ -235,10 +268,15 @@ plot_timeseries <- function(
       if (is.null(ylimits)) {
         p <- p + scale_y_log10(expand = expansion(mult = c(0, 0.05)))
       } else {
-        p <- p + scale_y_log10(limits = ylimits, expand = expansion(mult = c(0, 0.05)))
+        p <- p +
+          scale_y_log10(limits = ylimits, expand = expansion(mult = c(0, 0.05)))
       }
     } else if (!is.null(ylimits)) {
-      p <- p + scale_y_continuous(limits = ylimits, expand = expansion(mult = c(0, 0.05)))
+      p <- p +
+        scale_y_continuous(
+          limits = ylimits,
+          expand = expansion(mult = c(0, 0.05))
+        )
     }
 
     ## x-axis settings

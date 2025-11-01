@@ -204,8 +204,8 @@ if (sum((par_ini - lb) < 0) > 0) {
 
 #different solver types
 #algname = "NLOPT_LN_COBYLA"
-algname = "NLOPT_LN_NELDERMEAD"
-#algname = "NLOPT_LN_SBPLX"
+#algname = "NLOPT_LN_NELDERMEAD"
+algname = "NLOPT_LN_SBPLX"
 
 maxsteps = 2000 #number of steps/iterations for algorithm
 maxtime = 10 * 60 * 60 #maximum time in seconds (h*m*s)
@@ -227,7 +227,7 @@ names(fixedpars) = fixedparsdata[, 1]
 samples_list <- list(fixedpars)
 
 # create a list of samples for fixed parameters ranging from half to double, uniformly sampled with LHS
-set.seed(123) #for reproducibility of sampling and also for parallel fitting (which should not require randomness)
+set.seed(1234) #for reproducibility of sampling and also for parallel fitting (which should not require randomness)
 if (nsamp > 0) {
   lower <- 0.5 * fixedpars
   upper <- 2 * fixedpars

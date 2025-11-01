@@ -24,7 +24,8 @@ for (i in 1:nsamp) {
     modelfit = bestfit$odeout_df,
     tmax = 7,
     dose_levels,
-    dose_levels_labels
+    dose_levels_labels,
+    x_jitter = 0.2
   )
   plot(bestfit_plots)
   # save plot as png file into the results folder

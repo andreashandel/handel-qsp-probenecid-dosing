@@ -8,7 +8,11 @@ library(here)
 source(here::here("code", "plotting-code", "vpc-plot-function.R"))
 
 # Load simulation outputs (list of stochastic replicates)
-dose_response_list <- readRDS(here::here("results", "output", "dose-response-results.Rds"))
+dose_response_list <- readRDS(here::here(
+  "results",
+  "output",
+  "dose-response-results.Rds"
+))
 
 # Extract the time-series component for every replicate
 sim_timeseries <- lapply(dose_response_list, `[[`, "timeseries_df")
@@ -17,7 +21,11 @@ if (!length(sim_timeseries)) {
 }
 
 # Determine available schedules from the first replicate that has data
-first_with_data <- which(vapply(sim_timeseries, function(df) nrow(df) > 0, logical(1)))[1]
+first_with_data <- which(vapply(
+  sim_timeseries,
+  function(df) nrow(df) > 0,
+  logical(1)
+))[1]
 if (is.na(first_with_data)) {
   stop("No schedule information found in the simulation outputs.")
 }
@@ -45,7 +53,9 @@ observed_data <- bestfit_list[[1]]$fitdata %>%
   select(Dose, Quantity, Day, Value)
 
 if (!nrow(observed_data)) {
-  warning("No observed data matched the known dose levels; VPC plots will omit observations.")
+  warning(
+    "No observed data matched the known dose levels; VPC plots will omit observations."
+  )
 }
 
 # Pretty labels for the legend (consistent with other figures)
