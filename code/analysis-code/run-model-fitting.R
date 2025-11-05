@@ -6,7 +6,9 @@ library(dplyr)
 library(nloptr)
 library(deSolve)
 library(lhs) # for Latin Hypercube Sampling of fixed parameters
+library(future)
 library(future.apply) #to do fits in parallel
+library(beepr) # to make a sound when fitting is done
 
 # this file contains the ODE model as a function
 source(here::here('code/analysis-code/model-simulator-function.R'))
@@ -19,6 +21,7 @@ file_path = here::here("data/processed-data/processeddata.csv")
 fitdata = read.csv(file_path)
 
 # load fixed parameters from file
+# this does not include potentially fixed parameters for error distributions (i.e. the sigmas)
 pars_file = here::here('data/processed-data/fixed-parameters.csv')
 fixedparsdata = read.csv(pars_file)
 
@@ -28,6 +31,15 @@ fitdata$Scenario = factor(
   fitdata$Scenario,
   levels = c("NoTreatment", "PanCytoVir10mg", "PanCytoVir100mg")
 )
+# the 3 different treatment scenarios
+scenarios = unique(fitdata$Scenario)
+
+# make sure the different variables are alwaysi in the same oder
+fitdata$Quantity = factor(
+  fitdata$Quantity,
+  levels = c("LogVirusLoad", "IL6", "WeightLossPerc")
+)
+
 
 # add Dose to fitdata dataframe
 # values should be 0, 10 and 100 for the three scenarios
@@ -36,12 +48,10 @@ fitdata$Dose = c(0, 10, 100)[as.numeric(fitdata$Scenario)]
 # rename Day to xvals (by adding a column called xvals)
 fitdata$xvals = fitdata$Day
 
+#drug doses, actual amount in mg
 #division by 50 to scale from dose per kg to mouse weight, which is about 20g
 #so 1000g/20g = 50
-doses = c(0, 10, 100) / 50 #drug doses, actual amount in mg
-
-# the 3 different treatment scenarios
-scenarios = unique(fitdata$Scenario)
+doses = c(0, 10, 100) / 50
 
 
 # starting values for variables
@@ -110,7 +120,7 @@ C50_V = 1 #50% reduction on virus
 C50_Vl = 1e-7
 C50_Vh = 1e6
 
-# combine all fitted parameters into a vector
+# combine all main fitted parameters into a vector
 par_ini_full = c(
   b = b,
   k = k,
@@ -127,8 +137,43 @@ par_ini_full = c(
   C50_F = C50_F,
   C50_V = C50_V
 )
-par_ini = as.numeric(par_ini_full)
-fitparnames = names(par_ini_full)
+
+# Compute empirical variance per Quantity; small floor to avoid zero
+var_by_qty <- fitdata %>%
+  group_by(Quantity) %>%
+  summarize(v = var(Value, na.rm = TRUE), .groups = "drop")
+
+
+### NEW/CHANGED: define ALL six sigma params here (initial values)
+sigma_all <- c(
+  sigma_add_LogVirusLoad = sqrt(as.numeric(var_by_qty[1, 2])),
+  sigma_prop_LogVirusLoad = 0.0,
+  sigma_add_IL6 = sqrt(as.numeric(var_by_qty[2, 2])),
+  sigma_prop_IL6 = 0.0,
+  sigma_add_WeightLossPerc = as.numeric(sqrt(var_by_qty[3, 2])),
+  sigma_prop_WeightLossPerc = 0.0
+)
+
+### NEW/CHANGED: choose which of the six to FIT (edit this vector as needed)
+sigma_to_fit <- c(
+  "sigma_add_LogVirusLoad",
+  "sigma_add_IL6",
+  "sigma_add_WeightLossPerc"
+  # e.g., add "sigma_prop_LogVirusLoad" here if you want to fit it, too
+)
+
+
+### NEW/CHANGED: split fitted vs fixed sigmas
+sigma_fit_ini <- sigma_all[sigma_to_fit]
+sigma_fixed <- sigma_all[setdiff(names(sigma_all), sigma_to_fit)]
+
+### add the fitted sigmas to the fitted parameter vector
+par_ini_full <- c(par_ini_full, sigma_fit_ini)
+
+par_ini <- as.numeric(par_ini_full)
+fitparnames <- names(par_ini_full)
+
+
 # this is saved for later production of table
 parlabels = c(
   "Virus infection rate",
@@ -147,12 +192,32 @@ parlabels = c(
   "Half maximum of virus suppression effect"
 )
 
-# starting values from best fit values of previous run
-# load best fit from previous run
+
+# starting values either from best fit values of previous run or values above
 # can be commented out if one wants to start
 # with the above values
 oldbestfit = readRDS(here::here('results', 'output', 'bestfit.Rds'))
 par_ini = as.numeric(oldbestfit[[1]]$solution)
+# names(par_ini) = oldbestfit[[1]]$fitparnames
+par_ini = c(
+  4.52943261850361e-09,
+  8.75518412454531e-06,
+  194423.432746605,
+  5.57860256391612e-09,
+  999.999996075174,
+  0.00713889542090602,
+  0.00100000131114864,
+  99.9999999999999,
+  0.000100000010739417,
+  14.1529034384797,
+  0.384558435326209,
+  0.999999999999972,
+  1.00000112599677e-07,
+  1.28232731989397e-07,
+  0.497149276104125,
+  0.319182528407601,
+  6.40248424693608
+)
 
 # upper and lower bounds of parameters
 lb = as.numeric(c(
@@ -188,6 +253,11 @@ ub = as.numeric(c(
   C50_Vh
 ))
 
+### append bounds for the sigmas
+lb <- c(lb, rep(1e-6, length(sigma_fit_ini)))
+ub <- c(ub, rep(1e3, length(sigma_fit_ini)))
+
+
 # check bounds. if initial conditions are outside bounds, give a warning and adjust to bound.
 if (sum((ub - par_ini) < 0) > 0) {
   print(
@@ -202,26 +272,33 @@ if (sum((par_ini - lb) < 0) > 0) {
   par_ini = pmax(lb, par_ini)
 }
 
-#different solver types
-#algname = "NLOPT_LN_COBYLA"
-#algname = "NLOPT_LN_NELDERMEAD"
-algname = "NLOPT_LN_SBPLX"
+# number of samples
+nsamp = 0 # if this is 0, we only fit for the baseline values of the fixed parameters
 
-maxsteps = 2000 #number of steps/iterations for algorithm
+# settings for optimizer
+algname = "NLOPT_LN_COBYLA"
+#algname = "NLOPT_LN_NELDERMEAD"
+#algname = "NLOPT_LN_SBPLX"
+maxsteps = 100 #number of steps/iterations for algorithm
 maxtime = 10 * 60 * 60 #maximum time in seconds (h*m*s)
 ftol_rel = 1e-10
+
+# settings for ODE solver
+solvertype = "vode"
+tols = 1e-9
 tfinal = 7 #time of last data point
 dt = 0.02 # time step for which we want results returned
-nsamp = 49 # if this is 0, we only fit for the baseline values of the fixed parameters
 
 ##############
 # make samples for fixed parameters and re-fit for each sample
+# this excludes the sigmas
 ##############
 
 # extract relevant content from fixed parameters object
 # the object was loaded at the beginning of the script
 fixedpars = fixedparsdata[, 3]
 names(fixedpars) = fixedparsdata[, 1]
+
 
 # always add baseline as sample to fit
 samples_list <- list(fixedpars)
@@ -247,7 +324,10 @@ samples_list <- lapply(samples_list, function(x) {
   x
 })
 
-# make an empty list of length nsamp
+### NEW/CHANGED: append the FIXED sigmas (NOT sampled) to each fixed-pars sample
+samples_list <- lapply(samples_list, function(x) c(x, sigma_fixed))
+
+# make an empty list of length nsamp + 1 (always fit baseline)
 bestfit_all = vector("list", nsamp + 1)
 
 # record current time
@@ -259,14 +339,13 @@ start_time <- proc.time()
 # needed for parallel processing
 #################################################
 eval_one_sample <- function(i, print_level) {
-  # lightweight log (may appear slightly out of order in parallel)
   message(sprintf(
     "processing sample %d at %s",
     i,
     format(Sys.time(), "%H:%M:%S")
   ))
 
-  fixedpars <- samples_list[[i]]
+  fixedpars_i <- samples_list[[i]]
 
   # ---- fit ----
   bestfit <- nloptr::nloptr(
@@ -285,32 +364,51 @@ eval_one_sample <- function(i, print_level) {
     tfinal = tfinal,
     dt = dt,
     fitparnames = fitparnames,
-    fixedpars = fixedpars
+    fixedpars = fixedpars_i,
+    doses = doses,
+    scenarios = scenarios,
+    solvertype = solvertype,
+    tols = tols
   )
+  # finished with fitting
+  # doing some after fitting stuff
 
   # extract params
   params <- bestfit$solution
   names(params) <- fitparnames
 
-  # ---- simulate three doses ----
+  # pull out fitted parameters that are part of the ODE, excluding the sigmas
+  fit_sigmas <- grepl("^sigma_(add|prop)_", names(par_ini))
+  fitpars_ode = params[!fit_sigmas]
+
+  # pull out fixed parameters that are part of the ODE, excluding the sigmas
+  fixedpars = samples_list[[1]]
+  fixed_sigmas <- grepl("^sigma_(add|prop)_", names(fixedpars))
+  fixedpars_ode = fixedpars[!fixed_sigmas]
+
+  # ---- simulate doses ----
   tfinal_sim <- 7.5
   dt_sim <- 0.01
   run_one <- function(Ad0) {
     allpars <- c(
-      Y0,
-      params,
-      fixedpars,
-      Ad0 = Ad0,
-      txstart = 1,
-      txinterval = 0.5,
-      txend = 4,
-      tstart = 0,
-      tfinal = tfinal_sim,
-      dt = dt_sim
+      as.list(Y0),
+      as.list(fitpars_ode),
+      as.list(fixedpars_ode),
+      list(
+        Ad0 = Ad0,
+        txstart = 1,
+        txinterval = 0.5,
+        txend = 4,
+        tstart = 0,
+        tfinal = tfinal,
+        dt = dt,
+        solvertype = solvertype,
+        tols = tols
+      )
     )
-    do.call(simulate_model, as.list(allpars))
+    do.call(simulate_model, allpars)
   }
-  odeout_list <- lapply(doses[1:3], run_one)
+  odeout_list <- lapply(doses, run_one)
 
   # bind results + annotate
   odeout_df <- do.call(
@@ -325,14 +423,14 @@ eval_one_sample <- function(i, print_level) {
 
   # pack extras
   parstring <- paste0("c(", paste(as.numeric(params), collapse = ", "), ")")
-  bestfit$parstring <- parstring
+  bestfit$parstring <- parstring #same as solution but formatted so we can stick i in easily as start value
+  bestfit$fitpars <- params #same as solution but with names for parameters
   bestfit$fitparnames <- fitparnames
   bestfit$fixedpars <- fixedpars
   bestfit$Y0 <- Y0
   bestfit$fitdata <- fitdata
-  bestfit$parlabels <- parlabels
-  bestfit$simresult <- odeout_df
-  bestfit$odeout_df <- odeout_df
+  bestfit$parlabels <- parlabels #full names/labels for parameters
+  bestfit$simresult <- odeout_df #final simulations for the 3 scenarios
   bestfit$algorithm <- algname
 
   return(bestfit) # return the finished best fit
@@ -343,9 +441,10 @@ eval_one_sample <- function(i, print_level) {
 # do things either in parallel or not
 #########################################
 if (length(samples_list) > 1) {
-  workers <- 25
-  print_level <- 0 #no diagnostics
-  plan(multisession, workers = workers)
+  n_workers <- 25
+  workers <- min(n_workers, future::availableCores())
+  print_level <- 0
+  future::plan(multisession, workers = workers)
   message("Running in parallel with ", workers, " workers.")
 
   # --- run in parallel; reproducible RNG across workers ---
@@ -357,7 +456,7 @@ if (length(samples_list) > 1) {
   )
 
   # optional: switch back to sequential when done
-  plan(sequential)
+  future::plan(sequential)
 } else {
   message("Single sample detected; running sequentially (no futures).")
   print_level <- 1 #diagnostics
@@ -365,8 +464,6 @@ if (length(samples_list) > 1) {
   bestfit_all[[1]] <- eval_one_sample(1, print_level)
 }
 
-
-saveRDS(bestfit_all, here::here('results', 'output', 'bestfit.Rds'))
 
 # record end time and print total time elapsed in minutes
 #capture time taken for fit
@@ -376,10 +473,29 @@ cat('model fit took this many minutes:', runtime_minutes, '\n')
 cat('************** \n')
 cat('used algorithm: ', algname, '\n')
 cat('************** \n')
-cat('initial objective function: ', oldbestfit[[1]]$objective, '\n')
+# Safe print (won’t error if oldbestfit wasn’t loaded)
+if (exists("oldbestfit")) {
+  cat('initial objective function: ', oldbestfit[[1]]$objective, '\n')
+} else {
+  cat('initial objective function: (no previous run loaded)\n')
+}
 cat('************** \n')
 cat('final objective functions: ', '\n')
 # print all objective function values for each sample
 for (i in 1:(nsamp + 1)) {
   print(bestfit_all[[i]]$objective)
 }
+# play a sound when done
+beepr::beep(2)
+# statement that prints best fit parameter values as vector
+print(bestfit_all[[1]]$parstring)
+
+# copy prior best fit to a new file if it exists
+if (file.exists(here::here('results', 'output', 'bestfit.Rds'))) {
+  file.copy(
+    from = here::here('results', 'output', 'bestfit.Rds'),
+    to = here::here('results', 'output', 'oldbestfit.Rds')
+  )
+}
+# save new best fit
+saveRDS(bestfit_all, here::here('results', 'output', 'bestfit.Rds'))

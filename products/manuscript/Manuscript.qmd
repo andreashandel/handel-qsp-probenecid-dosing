@@ -197,13 +197,21 @@ knitr::include_graphics(here("assets", "model-diagram.png"))
 
 Some of the PK and PD parameters were fixed as described above. To reduce overfitting, additional prior information from previously published studies was used to fix selected parameters of the QSP model. Specifically, $c_F = 1$/day was set based on the reported decay rate of IL-6 [@kuribayashi2018], the T-cell growth rate was fixed at $g_A = 3$/day [@lewis2021] and the clearance rate of infected cells was set to $c_I = 1$/day [@smith11].
 
-To estimate the remaining parameters, the model variables for viral load, innate response, and symptoms were fit to the data from the H5N1 mouse study. The model was simultaneously fit to all three variables across the three treatment conditions (untreated, 10 mg, 100 mg). Since a large fraction of the data was obtained by destructive sampling of the animals, a mixed-effects approach that accounts for longitudinal sampling was not feasible. Instead, a weighted least squares approach was used, with weights based on the sample size of each measurement. Each measured variable was further normalized by its maximum value to ensure comparable importance across variables. This resulted in the following objective function being minimized by the fitting routine:
+To estimate the remaining parameters, the model predictions for log viral load, innate response, and symptoms were fit to the data for log virus load, IL6 and percent weight loss from the H5N1 mouse study. The model was simultaneously fit to all three variables across the three treatment conditions (untreated, 10 mg, 100 mg). Since a large fraction of the data was obtained by destructive sampling of the animals, a mixed-effects approach that accounts for longitudinal sampling was not feasible. Instead, a maximum likelihood approach was used, assuming a normal distribution with additive errors and independent variances for the three fitted quantities. Since sample size across measured quantities was uneven, and to ensure virus load and IL6 data had comparable impact on the fit, each variable was weighted by the inverse sample size. 
+
+This resulted in the following objective function being minimized by the fitting routine:
 
 $$
-O = \sum_{j,k} \frac{1}{N_{j,k} }  \sum_{i} \left( \frac{  (D_{i,j,k} - M_{i,j,k}) }{ D_j^{max} }\right)^2 
+O = \sum_{k} \frac{1}{N_{k}}  \textrm{NLL}_k  
 $$
 
-where $D_{i,j,k}$ is the data, i.e. the measured value $i$ for variable $j$ in treatment condition $k$, and $M_{i,j,k}$ is the model prediction. $N_{j,k}$ is the number of data points for variable $j$ in treatment condition $k$. $D_j^{max}$ is the maximum measured value for variable $j$ across all treatment conditions.
+where $N_{k}$ is the number of data points for variable $k$, and $\textrm{NLL}_k$ is the (non-normalized) negative log-likelihood term for each variable, given by
+
+$$
+\textrm{NLL}_k =  \sum_{i,j} \left( \log(\sigma_k) + \frac{  (D_{i,j,k} - M_{i,j,k}) }{ \sigma_k }\right)^2
+$$
+
+The terms $\sigma_k$ are the variances for each variable, $D_{i,j,k}$ is the data, i.e. the measured value $i$ in treatment condition $j$ for variable $k$, and $M_{i,j,k}$ are the model predictions. 
 
 To explore uncertainty in the estimates for the fixed parameters, latin hypercube sampling was used to generate 100 samples for all fixed parameters sampled uniformly with lower and upper ranges half and twice the baseline value. The only parameter that was not sampled based on strong prior evidence was $E_{max,V}$. For each sample of the fixed parameters, the model was refit and then used to produce the dose-response predictions shown in the results. 
 

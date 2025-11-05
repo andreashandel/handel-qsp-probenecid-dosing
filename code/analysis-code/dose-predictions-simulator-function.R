@@ -25,6 +25,18 @@ simulate_dose_predictions <- function(bestfit, ts_doses) {
   fixedpars <- bestfit$fixedpars
   Y0 <- bestfit$Y0
 
+  # Identify sigma params among *fitted* params
+  is_sigma <- grepl("^sigma_(add|prop)_", names(params))
+
+  # Structural params are everything else
+  params_struct <- params[!is_sigma]
+
+  # For the ODE, do NOT pass any sigma_* (strip from fixedpars too)
+  ode_param_pool <- c(
+    fixedpars[!grepl("^sigma_(add|prop)_", names(fixedpars))],
+    params_struct
+  )
+
   #############################################################################
   # 2.  HELPER FUNCTIONS ------------------------------------------------------
   #############################################################################
@@ -63,8 +75,7 @@ simulate_dose_predictions <- function(bestfit, ts_doses) {
     for (i in seq_along(doses)) {
       pars <- c(
         Y0,
-        params,
-        fixedpars,
+        ode_param_pool,
         Ad0 = doses[i] / 50, # divide by body weight scaling to get actual dose
         txstart = txstart,
         txinterval = txinterval,

@@ -17,7 +17,7 @@ plot_timeseries <- function(
   dose_levels_labels = NULL,
   x_jitter = 0,
   # Optional RNG seed so jitter is reproducible; set to a number (e.g., 123) or leave NULL.
-  x_jitter_seed = 123
+  x_jitter_seed = 1234
 ) {
   ## -------------------------------------------------------------------------
   ## Aesthetics and labels
@@ -215,8 +215,7 @@ plot_timeseries <- function(
         override.aes = list(
           linetype = linetype_vals,
           shape = shape_vals,
-          size = 1.2,
-          alpha = 1
+          size = 1.1
         )
       )
     } else {
@@ -257,7 +256,7 @@ plot_timeseries <- function(
           data = df_point,
           aes(x = xvals, y = Value, colour = Dose, shape = Dose),
           size = 1,
-          alpha = 1,
+          alpha = 0.5,
           show.legend = FALSE, # no separate shape legend
           position = point_pos # <-- NEW: x-only jitter applied here
         )
@@ -330,6 +329,7 @@ plot_timeseries <- function(
     "V",
     "Virus Load",
     logy = TRUE,
+    #ylimits = c(1e-2, vir_limits[2]),
     ylimits = vir_limits,
     tmax = tmax
   )
