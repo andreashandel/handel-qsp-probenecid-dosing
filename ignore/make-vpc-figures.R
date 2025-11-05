@@ -1,181 +1,98 @@
 ##########################################
-# make-vpc-figures.R
-##########################################
-#
-# Purpose --------------------------------------------------------------------
-# This script creates visual predictive check (VPC) figures for the calibrated
-# quantitative systems pharmacology (QSP) model.  The VPC compares the
-# experimental observations with the posterior predictive distribution that was
-# generated during the NPDE workflow (`run-npde-simulations.R`).  The plot shows
-# how well the model reproduces the magnitude and variability of the data across
-# all scenarios (No treatment, 10 mg/kg, 100 mg/kg) and outcome variables (virus
-# load, IL-6, and body weight).
-#
-# Overview --------------------------------------------------------------------
-# 1. Load the NPDE results, which contain both the observed data and the
-#    posterior predictive draws for every observation time.
-# 2. Summarise the predictive draws into point-wise quantiles (5th, 50th, and
-#    95th percentiles) for each scenario, quantity, and time point.
-# 3. Combine the summaries with the observed measurements to produce a faceted
-#    VPC figure that overlays the observations on the predictive intervals.
-# 4. Save the final figure to `results/figures/vpc-all.png` so that it is readily
-#    available for reports and manuscripts.
-#
-# The code favours clarity over brevity; explicit intermediate variables and
-# descriptive comments are used throughout to document each processing step.
+# Create visual predictive check (VPC) plots
 ##########################################
 
-############################################
-## Packages
-############################################
-
-library(ggplot2)
 library(dplyr)
-library(tidyr)
 library(here)
 
-############################################
-## 1. Load NPDE results and perform safety checks
-############################################
+source(here::here("code", "plotting-code", "vpc-plot-function.R"))
 
-npde_path <- here::here("results", "output", "npde-results.Rds")
-if (!file.exists(npde_path)) {
-  stop(
-    "The file 'results/output/npde-results.Rds' is missing. Run 'run-npde-simulations.R' before generating VPC figures."
-  )
+# Load simulation outputs (list of stochastic replicates)
+dose_response_list <- readRDS(here::here(
+  "results",
+  "output",
+  "dose-response-results.Rds"
+))
+
+# Extract the time-series component for every replicate
+sim_timeseries <- lapply(dose_response_list, `[[`, "timeseries_df")
+if (!length(sim_timeseries)) {
+  stop("No time-series trajectories found in dose-response results.")
 }
 
-npde_results <- readRDS(npde_path)
-
-observed_data <- npde_results$observed_data
-prediction_draws <- npde_results$prediction_draws
-
-if (is.null(observed_data) || nrow(observed_data) == 0) {
-  stop("No observed data found in the NPDE results object.")
+# Determine available schedules from the first replicate that has data
+first_with_data <- which(vapply(
+  sim_timeseries,
+  function(df) nrow(df) > 0,
+  logical(1)
+))[1]
+if (is.na(first_with_data)) {
+  stop("No schedule information found in the simulation outputs.")
 }
 
-if (is.null(prediction_draws) || nrow(prediction_draws) == 0) {
-  stop("No posterior predictions available for the VPC. Check the NPDE simulations.")
+schedule_ids <- sort(unique(sim_timeseries[[first_with_data]]$Schedule))
+
+# Observed data for overlay: take the first best-fit sample
+bestfit_list <- readRDS(here::here("results", "output", "bestfit.Rds"))
+if (!length(bestfit_list)) {
+  stop("Best-fit object not found or empty; cannot build VPC plots.")
 }
 
-# Ensure consistent factor ordering for scenarios and measured quantities.  The
-# NPDE helpers already enforce this, but we restate the logic here to make the
-# plotting script self-contained and explicit.
-scenario_levels <- c("NoTreatment", "PanCytoVir10mg", "PanCytoVir100mg")
-quantity_levels <- c("LogVirusLoad", "IL6", "Weight")
-
-observed_data <- observed_data %>%
+observed_data <- bestfit_list[[1]]$fitdata %>%
   mutate(
-    Scenario = factor(Scenario, levels = scenario_levels, ordered = TRUE),
-    Quantity = factor(Quantity, levels = quantity_levels, ordered = TRUE)
-  )
-
-prediction_draws <- prediction_draws %>%
-  mutate(
-    Scenario = factor(Scenario, levels = scenario_levels, ordered = TRUE),
-    Quantity = factor(Quantity, levels = quantity_levels, ordered = TRUE)
-  )
-
-############################################
-## 2. Summarise posterior predictive distribution
-############################################
-
-prediction_summary <- prediction_draws %>%
-  group_by(Scenario, Quantity, Day) %>%
-  summarise(
-    lower = stats::quantile(Prediction, probs = 0.05, na.rm = TRUE),
-    median = stats::quantile(Prediction, probs = 0.5, na.rm = TRUE),
-    upper = stats::quantile(Prediction, probs = 0.95, na.rm = TRUE),
-    .groups = "drop"
+    Day = xvals,
+    Dose = dplyr::case_when(
+      Scenario == "NoTreatment" ~ 0,
+      Scenario == "PanCytoVir10mg" ~ 10,
+      Scenario == "PanCytoVir100mg" ~ 100,
+      TRUE ~ NA_real_ # NOTE: update this mapping if additional scenarios are introduced.
+    )
   ) %>%
-  filter(!is.na(median))
+  filter(!is.na(Dose)) %>%
+  filter(Quantity %in% c("LogVirusLoad", "IL6", "Weight")) %>%
+  select(Dose, Quantity, Day, Value)
 
-############################################
-## 3. Create the VPC figure
-############################################
-
-# Friendly facet labels reused in other plotting scripts.
-scen_labs <- c(
-  NoTreatment = "No Treatment",
-  PanCytoVir10mg = "10 mg/kg",
-  PanCytoVir100mg = "100 mg/kg"
-)
-var_labs <- c(
-  LogVirusLoad = "Log Virus Load",
-  IL6 = "IL-6",
-  Weight = "Weight"
-)
-
-# Palette and shapes chosen to match existing diagnostic figures (Okabe–Ito).
-col_vals <- setNames(
-  c("#0072B2", "#009E73", "#D55E00")[seq_along(scenario_levels)],
-  scenario_levels
-)
-shape_vals <- setNames(c(16, 17, 15)[seq_along(scenario_levels)], scenario_levels)
-
-vpc_plot <- ggplot() +
-  geom_ribbon(
-    data = prediction_summary,
-    aes(x = Day, ymin = lower, ymax = upper, fill = Scenario),
-    alpha = 0.25,
-    colour = NA
-  ) +
-  geom_line(
-    data = prediction_summary,
-    aes(x = Day, y = median, colour = Scenario),
-    size = 1
-  ) +
-  geom_point(
-    data = observed_data,
-    aes(x = Day, y = Value, colour = Scenario, shape = Scenario),
-    size = 2,
-    alpha = 0.8
-  ) +
-  facet_grid(
-    rows = vars(Quantity),
-    cols = vars(Scenario),
-    labeller = labeller(Quantity = var_labs, Scenario = scen_labs),
-    scales = "free_y"
-  ) +
-  scale_color_manual(
-    values = col_vals,
-    name = "Scenario:",
-    labels = scen_labs
-  ) +
-  scale_shape_manual(
-    values = shape_vals,
-    name = "Scenario:",
-    labels = scen_labs
-  ) +
-  scale_fill_manual(values = col_vals, guide = "none") +
-  xlab("Time (days)") +
-  ylab("Observed and Predicted Values") +
-  theme_bw(base_size = 14) +
-  theme(
-    strip.background = element_blank(),
-    strip.text = element_text(size = 12),
-    legend.position = "top"
+if (!nrow(observed_data)) {
+  warning(
+    "No observed data matched the known dose levels; VPC plots will omit observations."
   )
-
-############################################
-## 4. Save the figure
-############################################
-
-fig_dir <- here::here("results", "figures")
-if (!dir.exists(fig_dir)) {
-  dir.create(fig_dir, recursive = TRUE)
 }
 
-png(
-  filename = file.path(fig_dir, "vpc-all.png"),
-  width = 10,
-  height = 8,
-  units = "in",
-  res = 300
-)
-print(vpc_plot)
-dev.off()
+# Pretty labels for the legend (consistent with other figures)
+format_dose_label <- function(dose) {
+  if (isTRUE(all.equal(dose, 0))) {
+    return("no drug")
+  }
+  paste0(format(dose, trim = TRUE, scientific = FALSE), " mg/kg")
+}
 
-##########################################
-# End of script
-##########################################
+all_dose_levels <- observed_data$Dose %>%
+  unique() %>%
+  sort()
+
+all_dose_labels <- vapply(all_dose_levels, format_dose_label, character(1))
+if (!length(all_dose_levels)) {
+  all_dose_levels <- NULL
+  all_dose_labels <- NULL
+}
+
+# Generate and save VPC plots for each schedule
+for (schedule_id in schedule_ids) {
+  vpc_plot <- plot_vpc_timeseries(
+    sim_timeseries = sim_timeseries,
+    schedule_id = schedule_id,
+    observed_df = observed_data,
+    dose_levels = all_dose_levels,
+    dose_labels = all_dose_labels
+  )
+
+  print(vpc_plot)
+
+  outfile <- here::here(
+    "results",
+    "figures",
+    sprintf("vpc-%s.png", schedule_id)
+  )
+
+  ggsave(outfile, vpc_plot, width = 10, height = 6, dpi = 300)
+}

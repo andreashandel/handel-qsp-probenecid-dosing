@@ -264,13 +264,13 @@ if (sum((ub - par_ini) < 0) > 0) {
   print(
     "Warning: initial value is larger than upper bound, setting it to upper bound"
   )
-  par_ini = pmin(ub, par_ini)
+  #par_ini = pmin(ub, par_ini)
 }
 if (sum((par_ini - lb) < 0) > 0) {
   print(
     "Warning: initial value is smaller than lower bound, setting it to lower bound"
   )
-  par_ini = pmax(lb, par_ini)
+  #par_ini = pmax(lb, par_ini)
 }
 
 # number of samples
@@ -380,7 +380,7 @@ eval_one_sample <- function(i, print_level) {
   bestfit$parstring <- parstring #same as solution but formatted so we can stick i in easily as start value
   bestfit$fitpars <- params #same as solution but with names for parameters
   bestfit$fitparnames <- fitparnames
-  bestfit$fixedpars <- fixedpars
+  bestfit$fixedpars <- fixedpars_i
   bestfit$Y0 <- Y0
   bestfit$fitdata <- fitdata
   bestfit$parlabels <- parlabels #full names/labels for parameters

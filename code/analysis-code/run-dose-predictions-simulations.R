@@ -28,12 +28,20 @@ timeseries_doses <- c(0, 1, 10, 1e2, 1e3, 1e4)
 workers <- 25
 plan(multisession, workers = workers)
 
+
+# settings to be passed to simulator function
+solvertype <- "vode"
+tols <- 1e-9
+dt <- 0.01
+tfinal <- 7
+
+
 simres_list <- future_lapply(
   seq_len(nsamp),
   function(i) {
     message(sprintf("processing sample %d", i)) # logs may print slightly out of order
     bestfit <- bestfit_list[[i]]
-    simulate_dose_predictions(bestfit, ts_doses = timeseries_doses, )
+    simulate_dose_predictions(bestfit, ts_doses = timeseries_doses, solvertype = solvertype, tols = tols, dt = dt, tfinal = tfinal)
   },
   future.seed = TRUE
 )

@@ -7,12 +7,12 @@
 library(deSolve)
 library(dplyr)
 library(caTools)
-
+library(here)
 
 # load model simulator function
 source(here("code/analysis-code/model-simulator-function.R"))
 
-simulate_dose_predictions <- function(bestfit, ts_doses, solvertype, tols, dt) {
+simulate_dose_predictions <- function(bestfit, ts_doses, solvertype, tols, dt, tfinal) {
   
   
   #############################################################################
@@ -75,12 +75,15 @@ simulate_dose_predictions <- function(bestfit, ts_doses, solvertype, tols, dt) {
         tols = tols
       )
     )
-    odeout <- try(do.call(simulate_model, allpars), silent = TRUE)
-      if (inherits(odeout, "try-error") || length(odeout) == 1) {
-        message("Integrator error – ", schedule_name, " (dose ", all_doses[i], ")")
-        next
-      }
+    # odeout <- try(do.call(simulate_model, allpars), silent = TRUE)
+    #   if (inherits(odeout, "try-error") || length(odeout) == 1) {
+    #     message("Integrator error – ", schedule_name, " (dose ", all_doses[i], ")")
+    #     next
+    #   }
     
+    odeout <- do.call(simulate_model, allpars)
+    
+
       ode_df <- as.data.frame(odeout)
 
       # ---- AUCs --------------------------------------------------------------
