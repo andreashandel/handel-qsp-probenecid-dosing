@@ -1,5 +1,9 @@
 # R script to fit data to the QSP model
 
+# clear workspace
+rm(list = ls(all.names = TRUE))
+
+
 # various packages needed by this script and the function it calls
 library(here)
 library(dplyr)

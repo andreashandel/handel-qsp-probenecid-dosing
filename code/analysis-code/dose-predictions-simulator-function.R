@@ -8,10 +8,11 @@ library(deSolve)
 library(dplyr)
 library(caTools)
 
+
 # load model simulator function
 source(here("code/analysis-code/model-simulator-function.R"))
 
-simulate_dose_predictions <- function(bestfit, ts_doses) {
+simulate_dose_predictions <- function(bestfit, ts_doses, solvertype, tols, dt) {
   
   
   #############################################################################
@@ -29,6 +30,7 @@ simulate_dose_predictions <- function(bestfit, ts_doses) {
       )
   }
 
+
   # Main simulator function-------------------------------------------------------------
   simulate_dose_response <- function(
     all_doses,
@@ -42,7 +44,8 @@ simulate_dose_predictions <- function(bestfit, ts_doses) {
     fixedpars_ode,
     solvertype,
     tols,
-    dt
+    dt, 
+    tfinal
   ) {
     # initialize summary data frame
     summary_df <- tibble(
@@ -112,7 +115,6 @@ simulate_dose_predictions <- function(bestfit, ts_doses) {
   # Main function part, calls the functions above
   # Model run parameters -------------------------------------------------------
   tfinal <- 7
-  dt <- 0.005
   all_doses <- sort(unique(c(ts_doses, 10^seq(-2, 5, length = 100)))) #making sure we include ts_doses
 
   params <- bestfit$solution
@@ -157,7 +159,8 @@ simulate_dose_predictions <- function(bestfit, ts_doses) {
     fixedpars_ode,
     solvertype,
     tols,
-    dt
+    dt,
+    tfinal
 
       )
     }

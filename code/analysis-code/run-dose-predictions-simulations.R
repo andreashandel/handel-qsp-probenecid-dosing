@@ -1,6 +1,10 @@
 #############################################################################
 # script to run dose prediction simulations for all posterior samples
 #############################################################################
+# clear workspace
+rm(list = ls(all.names = TRUE))
+
+
 # load packages needed by this script and the functions it calls
 library(here)
 library(deSolve)
@@ -29,7 +33,7 @@ simres_list <- future_lapply(
   function(i) {
     message(sprintf("processing sample %d", i)) # logs may print slightly out of order
     bestfit <- bestfit_list[[i]]
-    simulate_dose_predictions(bestfit, ts_doses = timeseries_doses)
+    simulate_dose_predictions(bestfit, ts_doses = timeseries_doses, )
   },
   future.seed = TRUE
 )
