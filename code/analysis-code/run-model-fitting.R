@@ -43,15 +43,12 @@ fitdata$Quantity = factor(
 
 # add Dose to fitdata dataframe
 # values should be 0, 10 and 100 for the three scenarios
+# this is in mg/kg
+# scaling to actual amount happens inside simulator 
 fitdata$Dose = c(0, 10, 100)[as.numeric(fitdata$Scenario)]
 
 # rename Day to xvals (by adding a column called xvals)
 fitdata$xvals = fitdata$Day
-
-#drug doses, actual amount in mg
-#division by 50 to scale from dose per kg to mouse weight, which is about 20g
-#so 1000g/20g = 50
-doses = c(0, 10, 100) / 50
 
 
 # starting values for variables
@@ -88,19 +85,19 @@ kFl = 1e-10
 kFh = 1e3
 cV = 10 #virus clearance rate
 cVl = 0.01
-cVh = 1e3
+cVh = 1e5
 
 gF = 0.1 #max innate growth
 gFl = 1e-3
 gFh = 1e3
 hV = 1e4 # saturation for virus induction effect
-hVl = 1e-3
+hVl = 1e-5
 hVh = 1e8
 Fmax = 5 # max innate response
-Fmaxl = 1
-Fmaxh = 100
+Fmaxl = 0.1
+Fmaxh = 1000
 hF = 1 #saturation of T-cell response
-hFl = 1e-4
+hFl = 1e-5
 hFh = 1e5
 gS = 10 #induction of symptoms by innate
 gSl = 1e-4
@@ -199,25 +196,25 @@ parlabels = c(
 oldbestfit = readRDS(here::here('results', 'output', 'bestfit.Rds'))
 par_ini = as.numeric(oldbestfit[[1]]$solution)
 # names(par_ini) = oldbestfit[[1]]$fitparnames
-par_ini = c(
-  4.52943261850361e-09,
-  8.75518412454531e-06,
-  194423.432746605,
-  5.57860256391612e-09,
-  999.999996075174,
-  0.00713889542090602,
-  0.00100000131114864,
-  99.9999999999999,
-  0.000100000010739417,
-  14.1529034384797,
-  0.384558435326209,
-  0.999999999999972,
-  1.00000112599677e-07,
-  1.28232731989397e-07,
-  0.497149276104125,
-  0.319182528407601,
-  6.40248424693608
-)
+# par_ini = c(
+#   4.52943261850361e-09,
+#   8.75518412454531e-06,
+#   194423.432746605,
+#   5.57860256391612e-09,
+#   999.999996075174,
+#   0.00713889542090602,
+#   0.00100000131114864,
+#   99.9999999999999,
+#   0.000100000010739417,
+#   14.1529034384797,
+#   0.384558435326209,
+#   0.999999999999972,
+#   1.00000112599677e-07,
+#   1.28232731989397e-07,
+#   0.497149276104125,
+#   0.319182528407601,
+#   6.40248424693608
+# )
 
 # upper and lower bounds of parameters
 lb = as.numeric(c(
@@ -279,7 +276,7 @@ nsamp = 0 # if this is 0, we only fit for the baseline values of the fixed param
 algname = "NLOPT_LN_COBYLA"
 #algname = "NLOPT_LN_NELDERMEAD"
 #algname = "NLOPT_LN_SBPLX"
-maxsteps = 100 #number of steps/iterations for algorithm
+maxsteps = 1000 #number of steps/iterations for algorithm
 maxtime = 10 * 60 * 60 #maximum time in seconds (h*m*s)
 ftol_rel = 1e-10
 
@@ -348,11 +345,8 @@ eval_one_sample <- function(i, print_level) {
   fixedpars_i <- samples_list[[i]]
 
   # ---- fit ----
-  bestfit <- nloptr::nloptr(
-    x0 = par_ini,
-    eval_f = fit_model_function,
-    lb = lb,
-    ub = ub,
+  bestfit <- nloptr::nloptr( x0 = par_ini,
+    eval_f = fit_model_function, lb = lb, ub = ub,
     opts = list(
       algorithm = algname,
       maxeval = maxsteps,
@@ -365,7 +359,7 @@ eval_one_sample <- function(i, print_level) {
     dt = dt,
     fitparnames = fitparnames,
     fixedpars = fixedpars_i,
-    doses = doses,
+    doses = unique(fitdata$Dose),
     scenarios = scenarios,
     solvertype = solvertype,
     tols = tols
@@ -377,50 +371,6 @@ eval_one_sample <- function(i, print_level) {
   params <- bestfit$solution
   names(params) <- fitparnames
 
-  # pull out fitted parameters that are part of the ODE, excluding the sigmas
-  fit_sigmas <- grepl("^sigma_(add|prop)_", names(par_ini))
-  fitpars_ode = params[!fit_sigmas]
-
-  # pull out fixed parameters that are part of the ODE, excluding the sigmas
-  fixedpars = samples_list[[1]]
-  fixed_sigmas <- grepl("^sigma_(add|prop)_", names(fixedpars))
-  fixedpars_ode = fixedpars[!fixed_sigmas]
-
-  # ---- simulate doses ----
-  tfinal_sim <- 7.5
-  dt_sim <- 0.01
-  run_one <- function(Ad0) {
-    allpars <- c(
-      as.list(Y0),
-      as.list(fitpars_ode),
-      as.list(fixedpars_ode),
-      list(
-        Ad0 = Ad0,
-        txstart = 1,
-        txinterval = 0.5,
-        txend = 4,
-        tstart = 0,
-        tfinal = tfinal,
-        dt = dt,
-        solvertype = solvertype,
-        tols = tols
-      )
-    )
-    do.call(simulate_model, allpars)
-  }
-  odeout_list <- lapply(doses, run_one)
-
-  # bind results + annotate
-  odeout_df <- do.call(
-    rbind,
-    lapply(seq_along(odeout_list), function(j) {
-      df <- as.data.frame(odeout_list[[j]])
-      df$Dose <- doses[j] * 50
-      df$Scenario <- scenarios[j]
-      df
-    })
-  )
-
   # pack extras
   parstring <- paste0("c(", paste(as.numeric(params), collapse = ", "), ")")
   bestfit$parstring <- parstring #same as solution but formatted so we can stick i in easily as start value
@@ -430,7 +380,6 @@ eval_one_sample <- function(i, print_level) {
   bestfit$Y0 <- Y0
   bestfit$fitdata <- fitdata
   bestfit$parlabels <- parlabels #full names/labels for parameters
-  bestfit$simresult <- odeout_df #final simulations for the 3 scenarios
   bestfit$algorithm <- algname
 
   return(bestfit) # return the finished best fit

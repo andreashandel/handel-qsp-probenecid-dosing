@@ -5,52 +5,15 @@
 # it needs: deSolve
 library(deSolve)
 
-simulate_model <- function(
-  Ad = 0,
-  Ac = 0,
-  At = 0,
-  U = 1e7,
-  I = 0,
-  V = 1,
-  F = 0,
-  A = 1,
-  S = 0,
-  b = 1e-8,
-  cI = 1,
-  k = 1e-6,
-  p = 1e3,
-  kF = 1e-3,
-  cV = 10,
-  gF = 1,
-  hV = 1e4,
-  Fmax = 10,
-  cF = 5,
-  hF = 10,
-  gA = 1,
-  gS = 1,
-  cS = 2,
-  Emax_V = 1,
-  C50_V = 10,
-  Emax_F = 0.5,
-  C50_F = 10,
-  ka = 2,
-  Vc = 4,
-  Vt = 20,
-  Q = 5,
-  Vmax = 1.6,
-  Km = 60,
-  fmax = 0.5,
-  f50 = 0.12,
-  Ad0 = 100,
-  txstart = 1,
-  txinterval = 0.5,
-  txend = 4,
-  tstart = 0,
-  tfinal = 10,
-  dt = 0.01,
-  solvertype = "lsoda",
-  tols = 1e-9
-) {
+# to test run this
+#simulate_model(Ad = 0, Ac = 0, At = 0, U = 1e7, I = 0, V = 1, F = 0, A = 1, S = 0, b = 1e-8, cI = 1, k = 1e-6, p = 1e3, kF = 1e-3, cV = 10, gF = 1, hV = 1e4, Fmax = 10, cF = 5, hF = 10, gA = 1, gS = 1, cS = 2, Emax_V = 1, C50_V = 10, Emax_F = 0.5, C50_F = 10, ka = 2, Vc = 4, Vt = 20, Q = 5, Vmax = 1.6, Km = 60, fmax = 0.5, f50 = 0.12, Ad0 = 100, txstart = 1, txinterval = 0.5, txend = 4, tstart = 0, tfinal = 10, dt = 0.01, solvertype = "lsoda", tols = 1e-9)
+
+# don't provide any defaults to ensure they are all passed in
+simulate_model <- function(Ad, Ac, At, U, I, V, F, A, S, 
+                           b, cI, k, p, kF, cV, gF, hV, Fmax, cF, hF, gA, gS, cS, 
+                           Emax_V, C50_V, Emax_F, C50_F, ka, Vc, Vt, Q, Vmax, Km, fmax, f50, 
+                           Ad0, txstart, txinterval, txend, tstart, tfinal, dt, solvertype, tols)
+ {
   #inner function that specifies the ode model
   odemodel <- function(t, y, parms) {
     with(
@@ -77,7 +40,7 @@ simulate_model <- function(
         # unclear how that exactly translates to number of infectious virus particles
         # thus setting some low but reasonable threshold
         # see my 2007 PCB paper for more discussions
-        if (V < 1e-6) {
+        if (V < 1e-5) {
           V <- 0
           dV <- 0
         } else {
@@ -97,8 +60,11 @@ simulate_model <- function(
   } #end function specifying the ODEs
 
   #function that specifies addition of drug at the indicated time
+  #drug doses, actual amount in mg used here
+  #division by 50 to scale from dose per kg to mouse weight, which is about 20g
+  #so 1000g/20g = 50
   adddrug <- function(t, y, parms) {
-    y['Ad'] = y['Ad'] + parms['Ad0']
+    y['Ad'] = y['Ad'] + parms['Ad0']/50
     return(y)
   }
 
@@ -110,36 +76,9 @@ simulate_model <- function(
   timevec = seq(tstart, tfinal, by = dt) #vector of times for which solution is returned (not that internal timestep of the integrator is different)
 
   #combining parameters into a parameter vector
-  odepars = c(
-    b = b,
-    cI = cI,
-    k = k,
-    p = p,
-    kF = kF,
-    cV = cV,
-    gF = gF,
-    hV = hV,
-    Fmax = Fmax,
-    cF = cF,
-    hF = hF,
-    gA = gA,
-    gS = gS,
-    cS = cS,
-    Emax_V = Emax_V,
-    C50_V = C50_V,
-    Emax_F = Emax_F,
-    C50_F = C50_F,
-    ka = ka,
-    Vc = Vc,
-    Vt = Vt,
-    Q = Q,
-    Vmax = Vmax,
-    Km = Km,
-    fmax = fmax,
-    f50 = f50,
-    Ad0 = Ad0
-  )
-
+  odepars = c(b = b, cI = cI, k = k, p = p, kF = kF, cV = cV, gF = gF, hV = hV, Fmax = Fmax, cF = cF, hF = hF, gA = gA, gS = gS, cS = cS, 
+              Emax_V = Emax_V, C50_V = C50_V, Emax_F = Emax_F, C50_F = C50_F, ka = ka, Vc = Vc, Vt = Vt, Q = Q, Vmax = Vmax, Km = Km, fmax = fmax, f50 = f50, Ad0 = Ad0)
+ 
   drugtimes = seq(txstart, txend, by = txinterval) #times at which drug is administered (in days)
 
   #this line runs the simulation, i.e. integrates the differential equations describing the infection process

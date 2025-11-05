@@ -37,7 +37,6 @@ fit_model_function <- function(
   fixed_sigmas <- grepl("^sigma_(add|prop)_", names(fixedpars))
   fixedpars_ode = fixedpars[!fixed_sigmas]
 
-  # ### NEW/CHANGED ###
   # Build a sigma pool that includes both FITTED and FIXED sigma parameters
   sigma_pool <- c(params[fit_sigmas], fixedpars[fixed_sigmas])
 

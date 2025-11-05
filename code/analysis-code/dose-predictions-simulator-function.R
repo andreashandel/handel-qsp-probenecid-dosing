@@ -12,33 +12,10 @@ library(caTools)
 source(here("code/analysis-code/model-simulator-function.R"))
 
 simulate_dose_predictions <- function(bestfit, ts_doses) {
-  # doses for which time-series is saved
-  ts_doses <- sort(unique(ts_doses))
-
-  # Model run parameters -------------------------------------------------------
-  tfinal <- 7
-  dt <- 0.005
-  doses <- sort(unique(c(0, ts_doses, 10^seq(-2, 5, length = 100)))) #making sure we include ts_doses
-
-  params <- bestfit$solution
-  names(params) <- bestfit$fitparnames
-  fixedpars <- bestfit$fixedpars
-  Y0 <- bestfit$Y0
-
-  # Identify sigma params among *fitted* params
-  is_sigma <- grepl("^sigma_(add|prop)_", names(params))
-
-  # Structural params are everything else
-  params_struct <- params[!is_sigma]
-
-  # For the ODE, do NOT pass any sigma_* (strip from fixedpars too)
-  ode_param_pool <- c(
-    fixedpars[!grepl("^sigma_(add|prop)_", names(fixedpars))],
-    params_struct
-  )
-
+  
+  
   #############################################################################
-  # 2.  HELPER FUNCTIONS ------------------------------------------------------
+  #  Inner FUNCTIONS ------------------------------------------------------
   #############################################################################
 
   # Percent-reduction helper ---------------------------------------------------
@@ -52,18 +29,24 @@ simulate_dose_predictions <- function(bestfit, ts_doses) {
       )
   }
 
-  # Main simulator -------------------------------------------------------------
+  # Main simulator function-------------------------------------------------------------
   simulate_dose_response <- function(
-    doses,
+    all_doses,
     txstart,
     txend,
     txinterval,
     schedule_name,
-    ts_doses
+    ts_doses,
+    Y0,
+    fitpars_ode,
+    fixedpars_ode,
+    solvertype,
+    tols,
+    dt
   ) {
     # initialize summary data frame
     summary_df <- tibble(
-      Dose = doses,
+      Dose = all_doses,
       AUCV = NA_real_,
       AUCF = NA_real_,
       AUCS = NA_real_,
@@ -72,25 +55,29 @@ simulate_dose_predictions <- function(bestfit, ts_doses) {
 
     ts_store <- list() # collect full trajectories
 
-    for (i in seq_along(doses)) {
-      pars <- c(
-        Y0,
-        ode_param_pool,
-        Ad0 = doses[i] / 50, # divide by body weight scaling to get actual dose
+    for (i in seq_along(all_doses)) {
+    allpars <- c(
+      as.list(Y0),
+      as.list(fitpars_ode),
+      as.list(fixedpars_ode),
+      list(
+        Ad0 = all_doses[i],
         txstart = txstart,
         txinterval = txinterval,
         txend = txend,
         tstart = 0,
         tfinal = tfinal,
-        dt = dt
+        dt = dt,
+        solvertype = solvertype,
+        tols = tols
       )
-
-      odeout <- try(do.call(simulate_model, as.list(pars)))
+    )
+    odeout <- try(do.call(simulate_model, allpars), silent = TRUE)
       if (inherits(odeout, "try-error") || length(odeout) == 1) {
-        message("Integrator error – ", schedule_name, " (dose ", doses[i], ")")
+        message("Integrator error – ", schedule_name, " (dose ", all_doses[i], ")")
         next
       }
-
+    
       ode_df <- as.data.frame(odeout)
 
       # ---- AUCs --------------------------------------------------------------
@@ -103,12 +90,12 @@ simulate_dose_predictions <- function(bestfit, ts_doses) {
 
       traj_df <- dplyr::mutate(
         ode_df,
-        Dose = doses[i],
+        Dose = all_doses[i],
         Schedule = schedule_name
       )
 
       # ---- store time-series only for selected doses -------------------------
-      if (doses[i] %in% ts_doses) {
+      if (all_doses[i] %in% ts_doses) {
         ts_store[[length(ts_store) + 1]] <- traj_df
       }
     }
@@ -121,6 +108,28 @@ simulate_dose_predictions <- function(bestfit, ts_doses) {
     return(ret_list)
   }
 
+
+  # Main function part, calls the functions above
+  # Model run parameters -------------------------------------------------------
+  tfinal <- 7
+  dt <- 0.005
+  all_doses <- sort(unique(c(ts_doses, 10^seq(-2, 5, length = 100)))) #making sure we include ts_doses
+
+  params <- bestfit$solution
+  names(params) <- bestfit$fitparnames
+  fixedpars <- bestfit$fixedpars
+  Y0 <- bestfit$Y0
+
+# pull out fitted parameters that are part of the ODE, excluding the sigmas
+  fit_sigmas <- grepl("^sigma_(add|prop)_", names(params))
+  fitpars_ode = params[!fit_sigmas]
+
+  # pull out fixed parameters that are part of the ODE, excluding the sigmas
+  fixed_sigmas <- grepl("^sigma_(add|prop)_", names(fixedpars))
+  fixedpars_ode = fixedpars[!fixed_sigmas]
+
+
+  
   #############################################################################
   # 3.  RUN ALL SCHEDULES ------------------------------------------------------
   # each schedule is a different treatment regimen shown in the main text
@@ -137,12 +146,19 @@ simulate_dose_predictions <- function(bestfit, ts_doses) {
     schedule_defs,
     \(s) {
       simulate_dose_response(
-        doses,
+        all_doses,
         s$txstart,
         s$txend,
         s$txinterval,
         s$name,
-        ts_doses
+        ts_doses,
+        Y0,
+    fitpars_ode,
+    fixedpars_ode,
+    solvertype,
+    tols,
+    dt
+
       )
     }
   )
