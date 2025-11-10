@@ -95,13 +95,13 @@ gF = 0.1 #max innate growth
 gFl = 1e-3
 gFh = 1e3
 hV = 1e4 # saturation for virus induction effect
-hVl = 1e-5
-hVh = 1e8
+# hVl = 1e-5
+# hVh = 1e8
 Fmax = 5 # max innate response
 Fmaxl = 0.1
-Fmaxh = 1000
-hF = 1 #saturation of T-cell response
-hFl = 1e-5
+Fmaxh = 10
+hF = 10 # T-cell induction response
+hFl = 100
 hFh = 1e5
 gS = 10 #induction of symptoms by innate
 gSl = 1e-4
@@ -129,7 +129,6 @@ par_ini_full = c(
   kF = kF,
   cV = cV,
   gF = gF,
-  hV = hV,
   Fmax = Fmax,
   hF = hF,
   gS = gS,
@@ -183,14 +182,16 @@ parlabels = c(
   "Innate response supression strength",
   "Virus removal rate",
   "Maximum innate response induction",
-  "Half maximum of innate response induction",
   "Maximum innate response",
-  "Innate response decay rate",
+  "Adaptive response half-maximum induction",
   "Symptom induction rate",
   "Symptom decay rate",
   "Maximum innate response supression",
   "Half maximum of innate response effect",
-  "Half maximum of virus suppression effect"
+  "Half maximum of virus suppression effect",
+  "Sigma of LogVirusLoad",
+  "Simga of IL6",
+  "Sigma of WeightLossPerc"
 )
 
 
@@ -200,25 +201,8 @@ parlabels = c(
 oldbestfit = readRDS(here::here('results', 'output', 'bestfit.Rds'))
 par_ini = as.numeric(oldbestfit[[1]]$solution)
 # names(par_ini) = oldbestfit[[1]]$fitparnames
-# par_ini = c(
-#   4.52943261850361e-09,
-#   8.75518412454531e-06,
-#   194423.432746605,
-#   5.57860256391612e-09,
-#   999.999996075174,
-#   0.00713889542090602,
-#   0.00100000131114864,
-#   99.9999999999999,
-#   0.000100000010739417,
-#   14.1529034384797,
-#   0.384558435326209,
-#   0.999999999999972,
-#   1.00000112599677e-07,
-#   1.28232731989397e-07,
-#   0.497149276104125,
-#   0.319182528407601,
-#   6.40248424693608
-# )
+#par_ini = c(6.38564317479985e-9, 0.0008139662918231, 45632.927287892, 0.000524055968325585, 126.02633258623, 0.0612491860382419, 5, 100, 69.3937856059817, 0.0100000000000009, 0.00172438718255394, 1.00135950945941e-07, 3.9452670546606e-07, 4.78095447065562, 0.307283559709252, 8.78609676438555) 
+  
 
 # upper and lower bounds of parameters
 lb = as.numeric(c(
@@ -228,7 +212,6 @@ lb = as.numeric(c(
   kFl,
   cVl,
   gFl,
-  hVl,
   Fmaxl,
   hFl,
   gSl,
@@ -244,7 +227,6 @@ ub = as.numeric(c(
   kFh,
   cVh,
   gFh,
-  hVh,
   Fmaxh,
   hFh,
   gSh,
@@ -280,7 +262,7 @@ nsamp = 0 # if this is 0, we only fit for the baseline values of the fixed param
 algname = "NLOPT_LN_COBYLA"
 #algname = "NLOPT_LN_NELDERMEAD"
 #algname = "NLOPT_LN_SBPLX"
-maxsteps = 1000 #number of steps/iterations for algorithm
+maxsteps = 500 #number of steps/iterations for algorithm
 maxtime = 10 * 60 * 60 #maximum time in seconds (h*m*s)
 ftol_rel = 1e-10
 
@@ -447,7 +429,8 @@ print(bestfit_all[[1]]$parstring)
 if (file.exists(here::here('results', 'output', 'bestfit.Rds'))) {
   file.copy(
     from = here::here('results', 'output', 'bestfit.Rds'),
-    to = here::here('results', 'output', 'oldbestfit.Rds')
+    to = here::here('results', 'output', 'oldbestfit.Rds'),
+    overwrite = TRUE
   )
 }
 # save new best fit

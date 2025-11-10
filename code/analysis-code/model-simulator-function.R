@@ -10,7 +10,7 @@ library(deSolve)
 
 # don't provide any defaults to ensure they are all passed in
 simulate_model <- function(Ad, Ac, At, U, I, V, F, A, S, 
-                           b, cI, k, p, kF, cV, gF, hV, Fmax, cF, hF, gA, gS, cS, 
+                           b, cI, k, p, kF, cV, gF, Fmax, cF, hF, gA, gS, cS, 
                            Emax_V, C50_V, Emax_F, C50_F, ka, Vc, Vt, Q, Vmax, Km, fmax, f50, 
                            Ad0, txstart, txinterval, txend, tstart, tfinal, dt, solvertype, tols)
  {
@@ -50,7 +50,8 @@ simulate_model <- function(Ad, Ac, At, U, I, V, F, A, S,
         # define system of ODEs
         dU = -b * U * V #uninfected cells
         dI = b * U * V - cI * I - k * I * A #infected cells
-        dF = (1 - f_F) * gF * (V / (V + hV)) * (Fmax - F) - cF * F #innate response
+        dF = (1 - f_F) * gF * V * (Fmax - F) - cF * F #innate response
+        #dF = (1 - f_F) * gF * (V / (V + hV)) * (Fmax - F) - cF * F #innate response
         dA = V * F / (V * F + hF) + gA * A #adaptive response
         dS = gS * F - cS * S #symptoms
 
@@ -76,7 +77,7 @@ simulate_model <- function(Ad, Ac, At, U, I, V, F, A, S,
   timevec = seq(tstart, tfinal, by = dt) #vector of times for which solution is returned (not that internal timestep of the integrator is different)
 
   #combining parameters into a parameter vector
-  odepars = c(b = b, cI = cI, k = k, p = p, kF = kF, cV = cV, gF = gF, hV = hV, Fmax = Fmax, cF = cF, hF = hF, gA = gA, gS = gS, cS = cS, 
+  odepars = c(b = b, cI = cI, k = k, p = p, kF = kF, cV = cV, gF = gF, Fmax = Fmax, cF = cF, hF = hF, gA = gA, gS = gS, cS = cS, 
               Emax_V = Emax_V, C50_V = C50_V, Emax_F = Emax_F, C50_F = C50_F, ka = ka, Vc = Vc, Vt = Vt, Q = Q, Vmax = Vmax, Km = Km, fmax = fmax, f50 = f50, Ad0 = Ad0)
  
   drugtimes = seq(txstart, txend, by = txinterval) #times at which drug is administered (in days)

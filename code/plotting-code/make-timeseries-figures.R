@@ -35,7 +35,7 @@ dose_levels_labels <- vapply(timeseries_doses, format_dose_label, character(1))
 # keep only the 'timeseries_df' from each element
 df_list <- lapply(dose_results, `[[`, "timeseries_df")
 
-# only make these figures for the baseline values of the fixed parameter set
+# only make these timeseries figures for the baseline values of the fixed parameter set, not the samples
 all_ts <- df_list[[1]]
 
 schedule_files <- c(
@@ -71,9 +71,12 @@ for (schedule_id in names(schedule_files)) {
   dev.off()
 }
 
+################################################################
 # now make the best fit figures, potentially for all samples
+################################################################
 dose_levels_labels <- c("no drug", "10 mg/kg", "100 mg/kg")
 dose_levels <- c(0, 10, 100)
+
 
 
 nsamp = 1
@@ -81,7 +84,15 @@ nsamp = 1
 #nsamp = length(bestfit_list)
 for (i in 1:nsamp) {
   bestfit <- bestfit_list[[i]]
+  # get the whole dose-response object for the indicated paramter sample
   all_ts <- df_list[[i]]
+  # extract the baseline scenario, which corresponds to the actual experimental setup
+  all_ts <- all_ts |>
+    filter(Schedule == 's1')
+  # extract the dosing levels that correspond to the experimental setup
+  all_ts <- all_ts |>
+    filter(Dose %in% dose_levels)
+
   bestfit_plots <- plot_timeseries(
     data = bestfit$fitdata,
     modelfit = all_ts,
