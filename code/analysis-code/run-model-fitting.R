@@ -94,14 +94,14 @@ cVh = 1e5
 gF = 0.1 #max innate growth
 gFl = 1e-3
 gFh = 1e3
-hV = 1e4 # saturation for virus induction effect
+#hV = 1e4 # saturation for virus induction effect
 # hVl = 1e-5
 # hVh = 1e8
 Fmax = 5 # max innate response
 Fmaxl = 0.1
 Fmaxh = 10
-hF = 10 # T-cell induction response
-hFl = 100
+hF = 1 # T-cell induction response
+hFl = 1e-3
 hFh = 1e5
 gS = 10 #induction of symptoms by innate
 gSl = 1e-4
@@ -200,8 +200,9 @@ parlabels = c(
 # with the above values
 oldbestfit = readRDS(here::here('results', 'output', 'bestfit.Rds'))
 par_ini = as.numeric(oldbestfit[[1]]$solution)
-# names(par_ini) = oldbestfit[[1]]$fitparnames
-#par_ini = c(6.38564317479985e-9, 0.0008139662918231, 45632.927287892, 0.000524055968325585, 126.02633258623, 0.0612491860382419, 5, 100, 69.3937856059817, 0.0100000000000009, 0.00172438718255394, 1.00135950945941e-07, 3.9452670546606e-07, 4.78095447065562, 0.307283559709252, 8.78609676438555) 
+names(par_ini) = oldbestfit[[1]]$fitparnames
+#par_ini = c(4.17739420172487e-09, 1e-4, 1422.70435873915, 5.92093154571912, 14.3783444407116, 0.182348375038655, 4.96479047728558, 198.357614832832, 47.8680927299117, 1.64835677299124, 0.00585349784837397, 976691.017114225, 0.00273524595596376, 4.79273603596189, 0.408452788642187, 5.76713262995559)
+  
   
 
 # upper and lower bounds of parameters
@@ -262,9 +263,9 @@ nsamp = 0 # if this is 0, we only fit for the baseline values of the fixed param
 algname = "NLOPT_LN_COBYLA"
 #algname = "NLOPT_LN_NELDERMEAD"
 #algname = "NLOPT_LN_SBPLX"
-maxsteps = 500 #number of steps/iterations for algorithm
+maxsteps = 1000 #number of steps/iterations for algorithm
 maxtime = 10 * 60 * 60 #maximum time in seconds (h*m*s)
-ftol_rel = 1e-10
+ftol_rel = 1e-8
 
 # settings for ODE solver
 solvertype = "vode"
