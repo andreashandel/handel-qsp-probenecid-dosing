@@ -19,6 +19,17 @@ dose_results <- readRDS(here::here('results','output', 'dose-response-results.Rd
 # to get data for plotting best fit figures
 bestfit_list <- readRDS(here("results", "output", "bestfit.Rds"))
 
+# unpack helper objects from the dose-response results
+timeseries_doses <- attr(dose_results, "ts_doses")
+df_list <- lapply(dose_results, `[[`, "timeseries_df")
+
+scenario_map <- c(
+  `0` = "NoTreatment",
+  `10` = "PanCytoVir10mg",
+  `100` = "PanCytoVir100mg"
+)
+dose_levels <- as.numeric(names(scenario_map))
+
 
 
 # ---------------- configuration ----------------
@@ -131,23 +142,29 @@ build_panel_plot <- function(df, ycol, alpha_pt, shape_vals, jitter_width) {
 }
 
 
-nsamp <- 1
-# comment out below if you want to generate plots for all samples
+nsamp <- min(1, length(bestfit_list))
+# comment out the line above if you want to generate plots for all samples
 # nsamp <- length(bestfit_list)
 
-for (i in 1:nsamp) {
+for (i in seq_len(nsamp)) {
   # get data from best fit object
   bf <- bestfit_list[[i]]
   dat <- bf$fitdata # columns: Scenario, Day, Quantity, Value, ...
-  
-  # get model simulations from the dose-response object for the indicated paramter sample
-  all_ts <- df_list[[i]]
-  # extract the baseline scenario, which corresponds to the actual experimental setup
-  all_ts <- all_ts |>
-    filter(Schedule == 's1')
-  # extract the dosing levels that correspond to the experimental setup
-  sim <- all_ts |>
-    filter(Dose %in% dose_levels)
+
+  if (is.null(df_list[[i]])) {
+    warning(sprintf("No dose-response time series found for sample %d; skipping.", i))
+    next
+  }
+
+  # get model simulations from the dose-response object for the indicated parameter sample
+  sim <- df_list[[i]] |>
+    filter(Schedule == 's1', Dose %in% dose_levels) |>
+    mutate(
+      Scenario = factor(
+        scenario_map[as.character(Dose)],
+        levels = scenario_map
+      )
+    )
   
 
   # keep factor levels consistent with fitter
