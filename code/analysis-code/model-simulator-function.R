@@ -52,8 +52,8 @@ simulate_model <- function(Ad, Ac, At, U, I, V, F, A, S,
         dI = b * U * V - cI * I - k * I * A #infected cells
         dF = (1 - f_F) * gF * V * (Fmax - F) - cF * F #innate response
         #dF = (1 - f_F) * gF * (V / (V + hV)) * (Fmax - F) - cF * F #innate response
-        #dA = V * F / (V * F + hF) + gA * A #adaptive response
-        dA = hF * F + gA * A #adaptive response
+        dA = V * F / (V * F + hF) + gA * A #adaptive response
+        #dA = hF * F + gA * A #adaptive response
         dS = gS * F - cS * S #symptoms
 
         list(c(dAd, dAc, dAt, dU, dI, dV, dF, dA, dS))

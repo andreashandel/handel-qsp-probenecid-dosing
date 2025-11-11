@@ -119,10 +119,17 @@ fit_param_defaults <- c(fit_param_defaults, sigma_all[sigma_to_fit])
 
 sigma_bounds <- data.frame(
   name = names(sigma_all),
-  min = 1e-6,
+  min = 0,
   max = 1e3,
   stringsAsFactors = FALSE
 )
+
+fit_param_bounds <- bind_rows(
+  fit_param_bounds,
+  sigma_bounds[sigma_bounds$name %in% sigma_to_fit, ]
+)
+fit_param_bounds <- fit_param_bounds[!duplicated(fit_param_bounds$name), ]
+fit_param_bounds$min <- 0
 
 # Fixed parameters (including the non-fitted sigmas) ----------------------------
 fixedpars_defaults <- c(fixedpars_base, sigma_all[setdiff(names(sigma_all), sigma_to_fit)])
@@ -197,6 +204,17 @@ param_input_id <- function(name) paste0("par_", name)
 fixed_input_id <- function(name) paste0("fixed_", name)
 
 `%||%` <- function(x, y) if (is.null(x)) y else x
+
+format_input_label <- function(name, label_map) {
+  label_text <- label_map[[name]]
+  label_text <- if (is.null(label_text)) "" else as.character(label_text)
+
+  if (!nzchar(label_text)) {
+    return(name)
+  }
+
+  paste(name, label_text, sep = " - ")
+}
 
 format_condition <- function(cond) {
   if (inherits(cond, "condition")) {
@@ -305,13 +323,13 @@ ui <- fluidPage(
             class = "parameter-grid",
             lapply(names(fit_param_defaults), function(nm) {
               bounds_row <- fit_param_bounds[fit_param_bounds$name == nm, ]
-              min_val <- if (nrow(bounds_row)) bounds_row$min else NA
               max_val <- if (nrow(bounds_row)) bounds_row$max else NA
+              label <- format_input_label(nm, fit_param_labels)
               numericInput(
                 inputId = param_input_id(nm),
-                label = fit_param_labels[[nm]],
+                label = label,
                 value = fit_param_defaults[[nm]],
-                min = min_val,
+                min = 0,
                 max = max_val,
                 step = NA
               )
@@ -323,11 +341,12 @@ ui <- fluidPage(
           div(
             class = "parameter-grid",
             lapply(names(fixedpars_base), function(nm) {
-              label <- fixed_param_labels[[nm]]
+              label <- format_input_label(nm, fixed_param_labels)
               numericInput(
                 inputId = fixed_input_id(nm),
                 label = label,
                 value = fixedpars_defaults[[nm]],
+                min = 0,
                 step = NA
               )
             })
@@ -336,12 +355,14 @@ ui <- fluidPage(
             class = "parameter-grid",
             tags$div(class = "control-header", "Measurement noise (fixed)"),
             lapply(setdiff(names(sigma_all), sigma_to_fit), function(nm) {
+              label <- format_input_label(nm, sigma_fixed_labels)
+              sigma_max <- sigma_bounds$max[sigma_bounds$name == nm]
               numericInput(
                 inputId = fixed_input_id(nm),
-                label = sigma_fixed_labels[[nm]],
+                label = label,
                 value = fixedpars_defaults[[nm]],
-                min = sigma_bounds$min[1],
-                max = sigma_bounds$max[1],
+                min = 0,
+                max = ifelse(length(sigma_max), sigma_max[1], NA),
                 step = NA
               )
             })
