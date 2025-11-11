@@ -40,7 +40,7 @@ source(here::here("code/analysis-code/dose-predictions-simulator-function.R"))
 # -----------------------------------------------------------------------------
 # Configuration – tweak as needed
 # -----------------------------------------------------------------------------
-set.seed(20240529)
+set.seed(1234)
 
 n_random_inits <- 20       # number of random Latin-hypercube initial guesses
 use_bestfit_as_start <- TRUE
