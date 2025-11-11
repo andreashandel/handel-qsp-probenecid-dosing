@@ -196,6 +196,18 @@ dt <- 0.02
 param_input_id <- function(name) paste0("par_", name)
 fixed_input_id <- function(name) paste0("fixed_", name)
 
+`%||%` <- function(x, y) if (is.null(x)) y else x
+
+format_condition <- function(cond) {
+  if (inherits(cond, "condition")) {
+    conditionMessage(cond)
+  } else if (is.null(cond)) {
+    ""
+  } else {
+    as.character(cond)
+  }
+}
+
 run_model_once <- function(params, fixedpars) {
   params <- params[!is.na(params)]
   fixedpars <- fixedpars[!is.na(fixedpars)]
@@ -281,10 +293,9 @@ ui <- fluidPage(
     sidebarPanel(
       width = 4,
       helpText(
-        "Adjust the parameters and press 'Run model' to update the simulation ",
+        "Adjust the parameters to immediately update the simulation ",
         "and objective function evaluation."
       ),
-      actionButton("run_model", "Run model", class = "btn-primary"),
       br(),
       tabsetPanel(
         id = "param-tabs",
@@ -355,7 +366,7 @@ server <- function(input, output, session) {
   fitted_values <- reactive({
     vals <- vapply(
       names(fit_param_defaults),
-      function(nm) input[[param_input_id(nm)]],
+      function(nm) input[[param_input_id(nm)]] %||% fit_param_defaults[[nm]],
       numeric(1),
       USE.NAMES = TRUE
     )
@@ -365,33 +376,29 @@ server <- function(input, output, session) {
   fixed_values <- reactive({
     vals <- vapply(
       names(fixedpars_defaults),
-      function(nm) input[[fixed_input_id(nm)]],
+      function(nm) input[[fixed_input_id(nm)]] %||% fixedpars_defaults[[nm]],
       numeric(1),
       USE.NAMES = TRUE
     )
     vals
   })
 
-  model_results <- eventReactive(
-    input$run_model,
-    {
-      params <- fitted_values()
-      fixedpars <- fixed_values()
+  model_results <- reactive({
+    params <- fitted_values()
+    fixedpars <- fixed_values()
 
-      run_model_once(params, fixedpars)
-    },
-    ignoreNULL = FALSE
-  )
+    run_model_once(params, fixedpars)
+  })
 
   output$objective_value <- renderText({
     res <- model_results()
 
     if (!is.null(res$error)) {
-      return(paste("Simulation failed:", conditionMessage(res$error)))
+      return(paste("Simulation failed:", format_condition(res$error)))
     }
 
     if (inherits(res$objective, "error")) {
-      return(paste("Objective evaluation failed:", conditionMessage(res$objective)))
+      return(paste("Objective evaluation failed:", format_condition(res$objective)))
     }
 
     paste0("Current objective value: ", format(res$objective, digits = 6, scientific = TRUE))
@@ -399,8 +406,8 @@ server <- function(input, output, session) {
 
   output$fit_plot <- renderPlot({
     res <- model_results()
-    validate(need(is.null(res$error), conditionMessage(res$error)))
-    validate(need(!inherits(res$objective, "error"), conditionMessage(res$objective)))
+    validate(need(is.null(res$error), format_condition(res$error)))
+    validate(need(!inherits(res$objective, "error"), format_condition(res$objective)))
 
     sim_df <- res$sim |>
       mutate(
