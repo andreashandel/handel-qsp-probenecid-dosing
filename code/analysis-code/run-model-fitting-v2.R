@@ -15,7 +15,7 @@ library(future.apply) #to do fits in parallel
 library(beepr) # to make a sound when fitting is done
 
 # this file contains the ODE model as a function
-source(here::here('code/analysis-code/model-simulator-function.R'))
+source(here::here('code/analysis-code/model-simulator-function-v2.R'))
 
 # function that performs a single fit iteration
 source(here::here('code/analysis-code/fit-model-function.R'))
@@ -60,7 +60,7 @@ U = 1e7 #from 2018 PCB paper
 I = 0
 V = 1 #assuming 1 virion to start
 F = 0 #no innate initially
-A = 0 #initial number of activated adaptive response
+A = 1 #initial number of activated adaptive response
 S = 0 #no symptoms
 Ad = 0 # no drug
 Ac = 0 #no drug
@@ -199,7 +199,7 @@ parlabels = c(
 # starting values either from best fit values of previous run or values above
 # can be commented out if one wants to start
 # with the above values
-oldbestfit = readRDS(here::here('results', 'output', 'bestfit.Rds'))
+oldbestfit = readRDS(here::here('results', 'output', 'bestfit-v2.Rds'))
 par_ini = as.numeric(oldbestfit[[1]]$solution)
 names(par_ini) = oldbestfit[[1]]$fitparnames
 #par_ini = c(3.32766301944983e-11, 5.45260032671489e-05, 27326504.6343563, 8.24677598056875e-09, 999.907338441145, 0.00692431092320305, 0.001, 99.6474912276584, 0.0414260036390491, 15.4904715802177, 0.440522208757901, 0.873900784371844, 1.00000173918664e-07, 2.17563625459632e-07, 4.79273603596189, 0.408452788642187, 5.76713262995559)
@@ -261,10 +261,6 @@ if (sum((par_ini - lb) < 0) > 0) {
   #par_ini = pmax(lb, par_ini)
 }
 
-# name of underlying model simulator, just used in exploratory phase
-#
-simulator = "simulate_model"
-
 # number of samples
 nsamp = 0 # if this is 0, we only fit for the baseline values of the fixed parameters
 
@@ -272,7 +268,7 @@ nsamp = 0 # if this is 0, we only fit for the baseline values of the fixed param
 #algname = "NLOPT_LN_COBYLA"
 #algname = "NLOPT_LN_NELDERMEAD"
 algname = "NLOPT_LN_SBPLX"
-maxsteps = 2000 #number of steps/iterations for algorithm
+maxsteps = 1000 #number of steps/iterations for algorithm
 maxtime = 10 * 60 * 60 #maximum time in seconds (h*m*s)
 ftol_rel = 1e-8
 
@@ -358,8 +354,7 @@ eval_one_sample <- function(i, print_level) {
     doses = unique(fitdata$Dose),
     scenarios = scenarios,
     solvertype = solvertype,
-    tols = tols,
-    simulator = simulator
+    tols = tols
   )
   # finished with fitting
   # doing some after fitting stuff
@@ -437,12 +432,12 @@ beepr::beep(2)
 print(bestfit_all[[1]]$parstring)
 
 # copy prior best fit to a new file if it exists
-if (file.exists(here::here('results', 'output', 'bestfit.Rds'))) {
+if (file.exists(here::here('results', 'output', 'bestfit-v2.Rds'))) {
   file.copy(
-    from = here::here('results', 'output', 'bestfit.Rds'),
-    to = here::here('results', 'output', 'oldbestfit.Rds'),
+    from = here::here('results', 'output', 'bestfit-v2.Rds'),
+    to = here::here('results', 'output', 'oldbestfit-v2.Rds'),
     overwrite = TRUE
   )
 }
 # save new best fit
-saveRDS(bestfit_all, here::here('results', 'output', 'bestfit.Rds'))
+saveRDS(bestfit_all, here::here('results', 'output', 'bestfit-v2.Rds'))

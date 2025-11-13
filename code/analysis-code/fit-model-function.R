@@ -23,8 +23,11 @@ fit_model_function <- function(
   doses,
   scenarios,
   solvertype,
-  tols
+  tols,
+  simulator = simulate_model
 ) {
+  simulator <- match.fun(simulator)
+
   #for some reason nloptr strips names from parameters
   #if i want to address parameters by name, I need to reassign their names
   names(params) = fitparnames
@@ -93,7 +96,7 @@ fit_model_function <- function(
     #try command catches error from ode function.
     # If error occurs and things "break", we exit the whole optimizer routine with a high objective function value,
     # this high value indicates that 'things didn't work'
-    odeout <- try(do.call(simulate_model, allpars), silent = TRUE)
+    odeout <- try(do.call(simulator, allpars), silent = TRUE)
     if (inherits(odeout, "try-error")) {
       cat(
         "!!!!!!unresolvable integrator error - triggering early return from optimizer!!!!!!"

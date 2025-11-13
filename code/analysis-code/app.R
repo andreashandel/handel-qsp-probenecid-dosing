@@ -5,6 +5,8 @@
 # and the corresponding objective function value. The layout mirrors the static
 # "best fit" figure by re-using the existing plotting helper.
 
+# run with shiny::runApp("code/analysis-code/app.R")
+
 library(shiny)
 library(here)
 library(dplyr)
@@ -17,6 +19,14 @@ library(patchwork)
 
 # Source the core model functions ------------------------------------------------
 source(here::here("code", "analysis-code", "model-simulator-function.R"))
+simulate_model_v1 <- simulate_model
+
+source(here::here("code", "analysis-code", "model-simulator-function-v2.R"))
+simulate_model_v2 <- simulate_model
+
+# default binding keeps backwards compatibility for other scripts
+simulate_model <- simulate_model_v1
+
 source(here::here("code", "analysis-code", "fit-model-function.R"))
 source(here::here("code", "plotting-code", "timeseries-plot-function.R"))
 
@@ -59,7 +69,7 @@ fixedpars_base <- as.numeric(fixedpars_base)
 names(fixedpars_base) <- fixedpars_df$parname
 
 # Initial conditions for the ODE system ----------------------------------------
-Y0 <- c(
+Y0_base <- c(
   Ad = 0,
   Ac = 0,
   At = 0,
@@ -79,6 +89,7 @@ fit_param_defaults <- c(
   kF = 1,
   cV = 10,
   gF = 0.1,
+  hV = 1e4,
   Fmax = 5,
   hF = 1,
   gS = 10,
@@ -90,8 +101,8 @@ fit_param_defaults <- c(
 
 fit_param_bounds <- data.frame(
   name = names(fit_param_defaults),
-  min = c(1e-12, 1e-8, 1e-3, 1e-10, 1e-2, 1e-3, 0.1, 1e-3, 1e-4, 1e-2, 1e-3, 1e-7, 1e-7),
-  max = c(1e-2, 1e5, 1e10, 1e3, 1e5, 1e3, 10, 1e5, 1e4, 1e4, 1, 1e6, 1e6),
+  min = c(1e-12, 1e-8, 1e-3, 1e-10, 1e-2, 1e-3, 1e-5, 0.1, 1e-3, 1e-4, 1e-2, 1e-3, 1e-7, 1e-7),
+  max = c(1e-2, 1e5, 1e10, 1e3, 1e5, 1e3, 1e8, 10, 1e5, 1e4, 1e4, 1, 1e6, 1e6),
   stringsAsFactors = FALSE
 )
 
@@ -135,35 +146,100 @@ fit_param_bounds$min <- 0
 fixedpars_defaults <- c(fixedpars_base, sigma_all[setdiff(names(sigma_all), sigma_to_fit)])
 
 # Attempt to load best-fit values as the starting point ------------------------
-bestfit_path <- here::here("results", "output", "bestfit.Rds")
-bestfit_obj <- tryCatch(readRDS(bestfit_path), error = function(e) NULL)
-
-if (is.list(bestfit_obj) && length(bestfit_obj) > 0) {
-  bestfit_first <- bestfit_obj[[1]]
-
-  if (!is.null(bestfit_first$fitpars)) {
-    overlap <- intersect(names(fit_param_defaults), names(bestfit_first$fitpars))
-    fit_param_defaults[overlap] <- bestfit_first$fitpars[overlap]
-  } else if (!is.null(bestfit_first$solution) && !is.null(bestfit_first$fitparnames)) {
-    bestfit_named <- bestfit_first$solution
-    names(bestfit_named) <- bestfit_first$fitparnames
-    overlap <- intersect(names(fit_param_defaults), names(bestfit_named))
-    fit_param_defaults[overlap] <- bestfit_named[overlap]
-  }
-
-  if (!is.null(bestfit_first$fixedpars)) {
-    overlap <- intersect(names(fixedpars_defaults), names(bestfit_first$fixedpars))
-    fixedpars_defaults[overlap] <- bestfit_first$fixedpars[overlap]
-  }
-
-  if (!is.null(bestfit_first$Y0)) {
-    overlap <- intersect(names(Y0), names(bestfit_first$Y0))
-    Y0[overlap] <- bestfit_first$Y0[overlap]
-  }
-}
-
 fit_param_defaults <- fit_param_defaults[!duplicated(names(fit_param_defaults))]
 fixedpars_defaults <- fixedpars_defaults[!duplicated(names(fixedpars_defaults))]
+
+fit_param_defaults_base <- fit_param_defaults
+fixedpars_defaults_base <- fixedpars_defaults
+
+load_bestfit_defaults <- function(bestfit_path, fit_defaults, fixed_defaults, Y0_defaults) {
+  bestfit_obj <- tryCatch(readRDS(bestfit_path), error = function(e) NULL)
+
+  if (is.list(bestfit_obj) && length(bestfit_obj) > 0) {
+    bestfit_first <- bestfit_obj[[1]]
+
+    if (!is.null(bestfit_first$fitpars)) {
+      overlap <- intersect(names(fit_defaults), names(bestfit_first$fitpars))
+      fit_defaults[overlap] <- bestfit_first$fitpars[overlap]
+    } else if (!is.null(bestfit_first$solution) && !is.null(bestfit_first$fitparnames)) {
+      bestfit_named <- bestfit_first$solution
+      names(bestfit_named) <- bestfit_first$fitparnames
+      overlap <- intersect(names(fit_defaults), names(bestfit_named))
+      fit_defaults[overlap] <- bestfit_named[overlap]
+    }
+
+    if (!is.null(bestfit_first$fixedpars)) {
+      overlap <- intersect(names(fixed_defaults), names(bestfit_first$fixedpars))
+      fixed_defaults[overlap] <- bestfit_first$fixedpars[overlap]
+    }
+
+    if (!is.null(bestfit_first$Y0)) {
+      overlap <- intersect(names(Y0_defaults), names(bestfit_first$Y0))
+      Y0_defaults[overlap] <- bestfit_first$Y0[overlap]
+    }
+  }
+
+  list(
+    fit = fit_defaults[!duplicated(names(fit_defaults))],
+    fixed = fixed_defaults[!duplicated(names(fixed_defaults))],
+    Y0 = Y0_defaults[!duplicated(names(Y0_defaults))]
+  )
+}
+
+build_model_config <- function(id, label, simulator, bestfit_path, Y0_override = NULL) {
+  fit_defaults <- fit_param_defaults_base
+  fixed_defaults <- fixedpars_defaults_base
+  Y0_defaults <- Y0_base
+
+  if (!is.null(Y0_override)) {
+    overlap <- intersect(names(Y0_defaults), names(Y0_override))
+    Y0_defaults[overlap] <- Y0_override[overlap]
+  }
+
+  defaults <- load_bestfit_defaults(bestfit_path, fit_defaults, fixed_defaults, Y0_defaults)
+
+  if (!is.null(Y0_override)) {
+    overlap <- intersect(names(defaults$Y0), names(Y0_override))
+    defaults$Y0[overlap] <- Y0_override[overlap]
+  }
+
+  list(
+    id = id,
+    label = label,
+    simulator = simulator,
+    fit_defaults = defaults$fit,
+    fixed_defaults = defaults$fixed,
+    Y0 = defaults$Y0,
+    bestfit_path = bestfit_path
+  )
+}
+
+model_configs <- list(
+  v1 = build_model_config(
+    id = "v1",
+    label = "model-simulator-function.R (A = 0)",
+    simulator = simulate_model_v1,
+    bestfit_path = here::here("results", "output", "bestfit.Rds"),
+    Y0_override = c(A = 0)
+  ),
+  v2 = build_model_config(
+    id = "v2",
+    label = "model-simulator-function-v2.R (A = 1)",
+    simulator = simulate_model_v2,
+    bestfit_path = here::here("results", "output", "bestfit-v2.Rds"),
+    Y0_override = c(A = 1)
+  )
+)
+
+default_model_id <- names(model_configs)[1]
+initial_fit_defaults <- model_configs[[default_model_id]]$fit_defaults
+initial_fixed_defaults <- model_configs[[default_model_id]]$fixed_defaults
+fit_param_names <- names(fit_param_defaults_base)
+fixed_param_names <- names(fixedpars_defaults_base)
+model_choices <- setNames(
+  names(model_configs),
+  vapply(model_configs, function(cfg) cfg$label, character(1))
+)
 
 # Helper metadata for UI construction -----------------------------------------
 fit_param_labels <- c(
@@ -173,6 +249,7 @@ fit_param_labels <- c(
   kF = "Innate response suppression strength",
   cV = "Virus removal rate",
   gF = "Maximum innate response induction",
+  hV = "Half-saturation for virus-induced innate activation",
   Fmax = "Maximum innate response",
   hF = "Adaptive response half-maximum induction",
   gS = "Symptom induction rate",
@@ -226,7 +303,7 @@ format_condition <- function(cond) {
   }
 }
 
-run_model_once <- function(params, fixedpars) {
+run_model_once <- function(params, fixedpars, Y0_vals, simulator) {
   params <- params[!is.na(params)]
   fixedpars <- fixedpars[!is.na(fixedpars)]
 
@@ -235,7 +312,7 @@ run_model_once <- function(params, fixedpars) {
 
   simulate_one <- function(ad0, scenario_label) {
     args <- c(
-      as.list(Y0),
+      as.list(Y0_vals),
       as.list(params_ode),
       as.list(fixedpars_ode),
       list(
@@ -251,7 +328,7 @@ run_model_once <- function(params, fixedpars) {
       )
     )
 
-    odeout <- tryCatch(do.call(simulate_model, args), error = identity)
+    odeout <- tryCatch(do.call(simulator, args), error = identity)
 
     if (inherits(odeout, "error")) {
       return(odeout)
@@ -279,7 +356,7 @@ run_model_once <- function(params, fixedpars) {
     fit_model_function(
       params = unname(params),
       fitdata = fitdata,
-      Y0 = Y0,
+      Y0 = Y0_vals,
       tfinal = tfinal,
       dt = dt,
       fitparnames = names(params),
@@ -287,7 +364,8 @@ run_model_once <- function(params, fixedpars) {
       doses = doses,
       scenarios = scenarios,
       solvertype = solvertype,
-      tols = tols
+      tols = tols,
+      simulator = simulator
     ),
     error = identity
   )
@@ -310,6 +388,12 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       width = 4,
+      selectInput(
+        "model_choice",
+        "Model version",
+        choices = model_choices,
+        selected = default_model_id
+      ),
       helpText(
         "Adjust the parameters to immediately update the simulation ",
         "and objective function evaluation."
@@ -321,14 +405,14 @@ ui <- fluidPage(
           "Fitted parameters",
           div(
             class = "parameter-grid",
-            lapply(names(fit_param_defaults), function(nm) {
+            lapply(fit_param_names, function(nm) {
               bounds_row <- fit_param_bounds[fit_param_bounds$name == nm, ]
               max_val <- if (nrow(bounds_row)) bounds_row$max else NA
               label <- format_input_label(nm, fit_param_labels)
               numericInput(
                 inputId = param_input_id(nm),
                 label = label,
-                value = fit_param_defaults[[nm]],
+                value = initial_fit_defaults[[nm]],
                 min = 0,
                 max = max_val,
                 step = NA
@@ -345,7 +429,7 @@ ui <- fluidPage(
               numericInput(
                 inputId = fixed_input_id(nm),
                 label = label,
-                value = fixedpars_defaults[[nm]],
+                value = initial_fixed_defaults[[nm]],
                 min = 0,
                 step = NA
               )
@@ -360,7 +444,7 @@ ui <- fluidPage(
               numericInput(
                 inputId = fixed_input_id(nm),
                 label = label,
-                value = fixedpars_defaults[[nm]],
+                value = initial_fixed_defaults[[nm]],
                 min = 0,
                 max = ifelse(length(sigma_max), sigma_max[1], NA),
                 step = NA
@@ -384,31 +468,61 @@ ui <- fluidPage(
 # Server logic -----------------------------------------------------------------
 # ---------------------------------------------------------------------------- #
 server <- function(input, output, session) {
+  model_config <- reactive({
+    req(input$model_choice)
+    model_configs[[input$model_choice]]
+  })
+
+  observeEvent(model_config(), {
+    cfg <- model_config()
+
+    for (nm in fit_param_names) {
+      updateNumericInput(
+        session = session,
+        inputId = param_input_id(nm),
+        value = cfg$fit_defaults[[nm]]
+      )
+    }
+
+    for (nm in fixed_param_names) {
+      updateNumericInput(
+        session = session,
+        inputId = fixed_input_id(nm),
+        value = cfg$fixed_defaults[[nm]]
+      )
+    }
+  }, ignoreNULL = FALSE)
+
   fitted_values <- reactive({
-    vals <- vapply(
-      names(fit_param_defaults),
-      function(nm) input[[param_input_id(nm)]] %||% fit_param_defaults[[nm]],
+    cfg <- model_config()
+    defaults <- cfg$fit_defaults
+
+    vapply(
+      fit_param_names,
+      function(nm) input[[param_input_id(nm)]] %||% defaults[[nm]],
       numeric(1),
       USE.NAMES = TRUE
     )
-    vals
   })
 
   fixed_values <- reactive({
-    vals <- vapply(
-      names(fixedpars_defaults),
-      function(nm) input[[fixed_input_id(nm)]] %||% fixedpars_defaults[[nm]],
+    cfg <- model_config()
+    defaults <- cfg$fixed_defaults
+
+    vapply(
+      fixed_param_names,
+      function(nm) input[[fixed_input_id(nm)]] %||% defaults[[nm]],
       numeric(1),
       USE.NAMES = TRUE
     )
-    vals
   })
 
   model_results <- reactive({
+    cfg <- model_config()
     params <- fitted_values()
     fixedpars <- fixed_values()
 
-    run_model_once(params, fixedpars)
+    run_model_once(params, fixedpars, cfg$Y0, cfg$simulator)
   })
 
   output$objective_value <- renderText({

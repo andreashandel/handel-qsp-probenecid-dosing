@@ -440,18 +440,20 @@ for (i in seq_len(nsamp)) {
       legend.box = "vertical" # two lines: variables (color) then scenarios (shape)
     )
 
-  print(p_gof_all)
-  png(
-    here::here(
-      "results",
-      "figures",
-      paste0("pred-vs-obs-allvars-singlepanel", i, ".png")
-    ),
-    width = 7.5,
-    height = 6,
-    units = "in",
-    res = 300
-  )
-  print(p_gof_all)
-  dev.off()
+  # all predicted versus observed in a single panel
+  # doesn't really make sense because of different scales for each variable
+  # print(p_gof_all)
+  # png(
+  #   here::here(
+  #     "results",
+  #     "figures",
+  #     paste0("pred-vs-obs-allvars-singlepanel", i, ".png")
+  #   ),
+  #   width = 7.5,
+  #   height = 6,
+  #   units = "in",
+  #   res = 300
+  # )
+  # print(p_gof_all)
+  # dev.off()
 }
