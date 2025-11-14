@@ -208,10 +208,10 @@ $$
 where $N_{k}$ is the number of data points for variable $k$, and $\textrm{NLL}_k$ is the (non-normalized) negative log-likelihood term for each variable, given by
 
 $$
-\textrm{NLL}_k =  \sum_{i,j} \left( \log(\sigma_k) + \frac{  (D_{i,j,k} - M_{i,j,k}) }{ \sigma_k }\right)^2
+\textrm{NLL}_k =  \sum_{i,j} \left( \log(\sigma_k^2) + \left( \frac{  D_{i,j,k} - M_{i,j,k} }{ \sigma_k }\right)^2 \right)
 $$
 
-The terms $\sigma_k$ are the variances for each variable, $D_{i,j,k}$ is the data, i.e. the measured value $i$ in treatment condition $j$ for variable $k$, and $M_{i,j,k}$ are the model predictions. 
+The terms $\sigma_k^2$ are the variances for each variable, $D_{i,j,k}$ is the data, i.e. the measured value $i$ in treatment condition $j$ for variable $k$, and $M_{i,j,k}$ are the model predictions. 
 
 To explore uncertainty in the estimates for the fixed parameters, latin hypercube sampling was used to generate 100 samples for all fixed parameters sampled uniformly with lower and upper ranges half and twice the baseline value. The only parameter that was not sampled based on strong prior evidence was $E_{max,V}$. For each sample of the fixed parameters, the model was refit and then used to produce the dose-response predictions shown in the results. 
 
@@ -245,12 +245,12 @@ knitr::include_graphics(here("results", "figures", "bestfit1.png"))
 ## Assessing the impact of dosing strength
 
 
-Subsequently, the calibrated model we used to explore the impact of varying probenecid dosing strength on virus load, inflammatory response and morbidity/symptoms. In the experimental setup, doses of 10mg and 100mg were administered. The model was used to simulate a wide range of doses from 0.001mg/kg to 1,000mg/kg, using the same dosing schedule as in the original study design, namely given twice daily for 3 days, starting on day 1 post-infection. As shown in @fig-dosepred, the total log virus load declined fairly rapidly between 10 and 100mg/kg. In contrast, the innate response and morbidity exhibited their greatest reductions at lower doses, and showed minimal changes beyond 1mg/kg. It should be noted that a dose of 10mg/kg corresponds to around 700mg for humans, which approaches the FDA approved maximum dose of 1,000mg twice per day (or 2,000mg per day). 
+Subsequently, the calibrated model we used to explore the impact of varying probenecid dosing strength on virus load, inflammatory response and morbidity/symptoms. The model was used to simulate a wide range of doses using the same dosing schedule as in the original study design, namely given twice daily for 3 days, starting on day 1 post-infection. As shown in @fig-dosepred, the total log virus load declined fairly rapidly between 10 and 100mg/kg. In contrast, the innate response and morbidity exhibited their greatest reductions at lower doses, and showed minimal changes beyond 1mg/kg. A dose of 10mg/kg corresponds to around 700mg for humans, which approaches the FDA approved maximum dose of 1,000mg twice per day (or 2,000mg per day). 
 
 
 ```{r}
 #| label: fig-dosepred
-#| fig-cap: "Outcomes for different doses. The left panel shows percent reduction in total log virus load (area under the curve) compared to no treatment. The middle panel shows the same for the innate response (IL 6), the right panel shows reduction in morbidity (weight loss). The vertical lines indicate the doses used in the experiment (10mg/kg and 100mg/kg). A figure with the time-series of all variables for doses of 1, 10 and 100mg is shown in the supplement."
+#| fig-cap: "Outcomes for different doses. The left panel shows percent reduction in total log virus load (area under the curve) compared to no treatment. The middle panel shows the same for the innate response (IL 6), the right panel shows reduction in morbidity (weight loss). The vertical lines indicate the doses used in the experiment (10mg/kg and 100mg/kg). A figure with the time-series of all variables for several dose levels is shown in the supplement."
 #| echo: FALSE
 knitr::include_graphics(here(
   "results",
@@ -277,7 +277,7 @@ Early treatment enhances the impact of antivirals against acute infections, such
 
 ```{r}
 #| label: fig-dosepred2
-#| fig-cap: "Outcomes for different treatment start times. Compared with a treatment start on day 1 (baseline), the model predicts that later treatments lead to less reduction in virus load, innate immune responses and symptoms. Figures with the time-series of all variables for doses of 1, 10 and 100mg for both day 2 and day 3 treatment start are shown in the supplement."
+#| fig-cap: "Outcomes for different treatment start times. Compared with a treatment start on day 1 (baseline), the model predicts that later treatments lead to less reduction in virus load, innate immune responses and symptoms. Figures with the time-series of all variables for several dose levels for both day 2 and day 3 treatment start are shown in the supplement."
 #| echo: FALSE
 knitr::include_graphics(here("results", "figures", "dose-response-txstart.png"))
 ```
@@ -294,7 +294,7 @@ As expected, @fig-dosepred3 illustrates that less frequent dosing requires highe
 
 ```{r}
 #| label: fig-dosepred3
-#| fig-cap: "Outcomes for different dosing frequencies. Compared to twice daily dosing, daily dosing leads to very similar results, and even single dosing does not lead to marked reduce of efficacy. Figures with the time-series of all variables for doses of 1, 10 and 100mg for both daily and single dosing are shown in the supplement."
+#| fig-cap: "Outcomes for different dosing frequencies. Compared to twice daily dosing, daily dosing leads to very similar results, and even single dosing does not lead to marked reduce of efficacy. Figures with the time-series of all variables for several dose levels for both daily and single dosing are shown in the supplement."
 #| echo: FALSE
 knitr::include_graphics(here(
   "results",

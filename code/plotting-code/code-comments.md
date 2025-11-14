@@ -1,8 +1,0 @@
-# Code Review Notes
-
-## make-timeseries-figures.R
-- Lines 82-93 reuse `df_list[[i]]` (the `timeseries_df` returned by the dose-response simulations) as the `modelfit` input when building the best-fit plots. Those time-series include all schedule scenarios (`s1`–`s5`) and doses sampled for the forward-looking dose exploration, so they no longer correspond to the trajectories generated during fitting for the experimental scenarios (`NoTreatment`, `PanCytoVir10mg`, `PanCytoVir100mg`). As a result, the "best fit" figures are not actually displaying the fitted model predictions that were compared against the data, and the plotted curves can mix in schedules that have no associated observations. Please swap this out for the trajectories saved in the fit objects themselves (e.g., `bestfit$simresult`) so the plots reflect the fitted model.
-- Even if the above issue is fixed, the current `dose_levels <- c(0, 10, 100)`/`dose_levels_labels` pair (lines 75-91) does not match the extra doses present in `df_list[[i]]` (0, 1, 10, 100, 1000, 10000). When the data frame still contains those other doses, they will be coerced to `NA` factors, which silently drops those trajectories and can leave partially evaluated layers inside `ggplot`. Filtering the simulated trajectories down to the exact dose set you want to plot will keep the inputs clean and avoid relying on side-effects of the factor conversion.
-
-## make-tables.R
-- The parameter values column is populated from `bestfit$x0` (line 16), which is the optimizer's starting guess, not the optimized solution. The table therefore reports the initial values instead of the fitted estimates. Switch to `bestfit$solution` or the stored `bestfit$fitpars` to show the actual fit results.

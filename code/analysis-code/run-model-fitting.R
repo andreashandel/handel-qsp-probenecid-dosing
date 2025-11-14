@@ -29,6 +29,9 @@ fitdata = read.csv(file_path)
 pars_file = here::here('data/processed-data/fixed-parameters.csv')
 fixedparsdata = read.csv(pars_file)
 
+# load prior best fit, can be used as starting condition
+oldbestfit = readRDS(here::here('results', 'output', 'bestfit.Rds'))
+
 
 # make Scenario an ordered factor
 fitdata$Scenario = factor(
@@ -196,15 +199,6 @@ parlabels = c(
 )
 
 
-# starting values either from best fit values of previous run or values above
-# can be commented out if one wants to start
-# with the above values
-oldbestfit = readRDS(here::here('results', 'output', 'bestfit.Rds'))
-par_ini = as.numeric(oldbestfit[[1]]$solution)
-names(par_ini) = oldbestfit[[1]]$fitparnames
-#par_ini = c(3.32766301944983e-11, 5.45260032671489e-05, 27326504.6343563, 8.24677598056875e-09, 999.907338441145, 0.00692431092320305, 0.001, 99.6474912276584, 0.0414260036390491, 15.4904715802177, 0.440522208757901, 0.873900784371844, 1.00000173918664e-07, 2.17563625459632e-07, 4.79273603596189, 0.408452788642187, 5.76713262995559)
-
-#par_ini = c(4.17739420172487e-09, 1e-4, 1422.70435873915, 5.92093154571912, 14.3783444407116, 0.182348375038655, 4.96479047728558, 198.357614832832, 47.8680927299117, 1.64835677299124, 0.00585349784837397, 976691.017114225, 0.00273524595596376, 4.79273603596189, 0.408452788642187, 5.76713262995559)
   
   
 
@@ -247,32 +241,36 @@ lb <- c(lb, rep(1e-6, length(sigma_fit_ini)))
 ub <- c(ub, rep(1e3, length(sigma_fit_ini)))
 
 
+
+
 # check bounds. if initial conditions are outside bounds, give a warning and adjust to bound.
-if (sum((ub - par_ini) < 0) > 0) {
-  print(
-    "Warning: initial value is larger than upper bound, setting it to upper bound"
-  )
-  #par_ini = pmin(ub, par_ini)
-}
-if (sum((par_ini - lb) < 0) > 0) {
-  print(
-    "Warning: initial value is smaller than lower bound, setting it to lower bound"
-  )
-  #par_ini = pmax(lb, par_ini)
-}
+# if (sum((ub - par_ini) < 0) > 0) {
+#   print(
+#     "Warning: initial value is larger than upper bound, setting it to upper bound"
+#   )
+#   #par_ini = pmin(ub, par_ini)
+# }
+# if (sum((par_ini - lb) < 0) > 0) {
+#   print(
+#     "Warning: initial value is smaller than lower bound, setting it to lower bound"
+#   )
+#   #par_ini = pmax(lb, par_ini)
+# }
 
 # name of underlying model simulator, just used in exploratory phase
 #
 simulator = "simulate_model"
 
 # number of samples
-nsamp = 0 # if this is 0, we only fit for the baseline values of the fixed parameters
+nsamp = 99 # if this is 0, we only fit for the baseline values of the fixed parameters
+n_workers <- 34 #number of workers for parallel processing
+
 
 # settings for optimizer
 #algname = "NLOPT_LN_COBYLA"
-#algname = "NLOPT_LN_NELDERMEAD"
-algname = "NLOPT_LN_SBPLX"
-maxsteps = 2000 #number of steps/iterations for algorithm
+algname = "NLOPT_LN_NELDERMEAD"
+#algname = "NLOPT_LN_SBPLX"
+maxsteps = 1000 #number of steps/iterations for algorithm
 maxtime = 10 * 60 * 60 #maximum time in seconds (h*m*s)
 ftol_rel = 1e-8
 
@@ -340,6 +338,22 @@ eval_one_sample <- function(i, print_level) {
 
   fixedpars_i <- samples_list[[i]]
 
+  # starting values either from best fit values of previous run or values above
+  # can be commented out if one wants to start
+  # with the above values
+  
+  # assign par_ini to either oldbestfit[[i]]$solution or if that doesn't exist, assign oldbestfit[[1]]
+  if (i > length(oldbestfit))
+    {
+      par_ini = as.numeric(oldbestfit[[1]]$solution)
+    } else {
+    par_ini = as.numeric(oldbestfit[[i]]$solution)
+  }
+
+  #par_ini = c(6.4857896581302e-11, 0.00161358181366674, 31111314.9827666, 1.92313415018512e-07, 2184.74240316617, 0.00567819135935593, 0.00131484020692288, 97.2375066475568, 0.00119880351158823, 12.7983864240356, 0.223488842973654, 0.999999809502875, 1.00000016977163e-07, 7.71153090551312e-07, 0.130182376479872, 0.285280921007449, 6.25066476701104)
+  
+  names(par_ini) = oldbestfit[[1]]$fitparnames
+  
   # ---- fit ----
   bestfit <- nloptr::nloptr( x0 = par_ini,
     eval_f = fit_model_function, lb = lb, ub = ub,
@@ -387,7 +401,6 @@ eval_one_sample <- function(i, print_level) {
 # do things either in parallel or not
 #########################################
 if (length(samples_list) > 1) {
-  n_workers <- 25
   workers <- min(n_workers, future::availableCores())
   print_level <- 0
   future::plan(multisession, workers = workers)
@@ -419,22 +432,35 @@ cat('model fit took this many minutes:', runtime_minutes, '\n')
 cat('************** \n')
 cat('used algorithm: ', algname, '\n')
 cat('************** \n')
-# Safe print (won’t error if oldbestfit wasn’t loaded)
-if (exists("oldbestfit")) {
-  cat('initial objective function: ', oldbestfit[[1]]$objective, '\n')
+
+# put the old and new objective function values together in a two-column data frame
+old_objectives <- if (exists("oldbestfit")) {
+  vapply(
+    seq_along(bestfit_all),
+    function(i) {
+      if (!is.null(oldbestfit[[i]])) {
+        oldbestfit[[i]]$objective
+      } else {
+        NA_real_
+      }
+    },
+    numeric(1)
+  )
 } else {
-  cat('initial objective function: (no previous run loaded)\n')
+  rep(NA_real_, length(bestfit_all))
 }
-cat('************** \n')
-cat('final objective functions: ', '\n')
-# print all objective function values for each sample
-for (i in 1:(nsamp + 1)) {
-  print(bestfit_all[[i]]$objective)
-}
+new_objectives <- vapply(bestfit_all, function(x) x$objective, numeric(1))
+objective_summary <- data.frame(
+  old_objective = old_objectives,
+  new_objective = new_objectives,
+  improvement = old_objectives - new_objectives  
+)
+
+print(objective_summary)
+
+
 # play a sound when done
 beepr::beep(2)
-# statement that prints best fit parameter values as vector
-print(bestfit_all[[1]]$parstring)
 
 # copy prior best fit to a new file if it exists
 if (file.exists(here::here('results', 'output', 'bestfit.Rds'))) {

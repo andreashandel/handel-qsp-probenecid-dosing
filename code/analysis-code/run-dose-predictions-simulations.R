@@ -10,6 +10,7 @@ library(here)
 library(deSolve)
 library(caTools)
 library(dplyr)
+library(future)
 library(future.apply) #to do fits in parallel
 
 source(here("code/analysis-code/dose-predictions-simulator-function.R"))
