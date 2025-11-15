@@ -51,7 +51,7 @@ fitdata$Quantity = factor(
 # add Dose to fitdata dataframe
 # values should be 0, 10 and 100 for the three scenarios
 # this is in mg/kg
-# scaling to actual amount happens inside simulator 
+# scaling to actual amount happens inside simulator
 fitdata$Dose = c(0, 10, 100)[as.numeric(fitdata$Scenario)]
 
 # rename Day to xvals (by adding a column called xvals)
@@ -186,11 +186,12 @@ parlabels = c(
   "Innate response supression strength",
   "Virus removal rate",
   "Maximum innate response induction",
+  "Adaptive response half-maximum induction",
   "Maximum innate response",
   "Adaptive response half-maximum induction",
   "Symptom induction rate",
   "Symptom decay rate",
-  "Maximum innate response supression",
+  "Maximum drug effect on innate response",
   "Half maximum of innate response effect",
   "Half maximum of virus suppression effect",
   "Sigma of LogVirusLoad",
@@ -199,8 +200,10 @@ parlabels = c(
 )
 
 
-  
-  
+if (length(parlabels) != length(par_ini)) {
+  stop("length of parlabels does not match length of par_ini")
+}
+
 
 # upper and lower bounds of parameters
 lb = as.numeric(c(
@@ -241,8 +244,6 @@ lb <- c(lb, rep(1e-6, length(sigma_fit_ini)))
 ub <- c(ub, rep(1e3, length(sigma_fit_ini)))
 
 
-
-
 # check bounds. if initial conditions are outside bounds, give a warning and adjust to bound.
 # if (sum((ub - par_ini) < 0) > 0) {
 #   print(
@@ -263,14 +264,14 @@ simulator = "simulate_model"
 
 # number of samples
 nsamp = 99 # if this is 0, we only fit for the baseline values of the fixed parameters
-n_workers <- 34 #number of workers for parallel processing
+n_workers <- 10 #number of workers for parallel processing
 
 
 # settings for optimizer
-#algname = "NLOPT_LN_COBYLA"
-algname = "NLOPT_LN_NELDERMEAD"
+algname = "NLOPT_LN_COBYLA"
+#algname = "NLOPT_LN_NELDERMEAD"
 #algname = "NLOPT_LN_SBPLX"
-maxsteps = 1000 #number of steps/iterations for algorithm
+maxsteps = 100 #number of steps/iterations for algorithm
 maxtime = 10 * 60 * 60 #maximum time in seconds (h*m*s)
 ftol_rel = 1e-8
 
@@ -341,22 +342,24 @@ eval_one_sample <- function(i, print_level) {
   # starting values either from best fit values of previous run or values above
   # can be commented out if one wants to start
   # with the above values
-  
+
   # assign par_ini to either oldbestfit[[i]]$solution or if that doesn't exist, assign oldbestfit[[1]]
-  if (i > length(oldbestfit))
-    {
-      par_ini = as.numeric(oldbestfit[[1]]$solution)
-    } else {
+  if (i > length(oldbestfit)) {
+    par_ini = as.numeric(oldbestfit[[1]]$solution)
+  } else {
     par_ini = as.numeric(oldbestfit[[i]]$solution)
   }
 
   #par_ini = c(6.4857896581302e-11, 0.00161358181366674, 31111314.9827666, 1.92313415018512e-07, 2184.74240316617, 0.00567819135935593, 0.00131484020692288, 97.2375066475568, 0.00119880351158823, 12.7983864240356, 0.223488842973654, 0.999999809502875, 1.00000016977163e-07, 7.71153090551312e-07, 0.130182376479872, 0.285280921007449, 6.25066476701104)
-  
+
   names(par_ini) = oldbestfit[[1]]$fitparnames
-  
+
   # ---- fit ----
-  bestfit <- nloptr::nloptr( x0 = par_ini,
-    eval_f = fit_model_function, lb = lb, ub = ub,
+  bestfit <- nloptr::nloptr(
+    x0 = par_ini,
+    eval_f = fit_model_function,
+    lb = lb,
+    ub = ub,
     opts = list(
       algorithm = algname,
       maxeval = maxsteps,
@@ -453,7 +456,7 @@ new_objectives <- vapply(bestfit_all, function(x) x$objective, numeric(1))
 objective_summary <- data.frame(
   old_objective = old_objectives,
   new_objective = new_objectives,
-  improvement = old_objectives - new_objectives  
+  improvement = old_objectives - new_objectives
 )
 
 print(objective_summary)

@@ -40,13 +40,14 @@ The data in a format that is ready for modeling is located in the `data ` folder
 
 Scripts to fit the model to the data and run the simulations for different doses are located in the `analysis-code` folder. Code to generate figures and tables is located in the `plotting-code` folder.
 
-
+NEEDS TO BE COMPLETED
 
 {{< pagebreak >}}
 
 
 # Additional results
 
+The following sections provide additional results from the model fitting and simulations.
 
 ## Table of parameter estimates
 
@@ -67,11 +68,16 @@ Values for fixed parameters are described in the methods section of the main tex
 Additional tables of best fit estimates for all fixed parameter samples can be generated with the supplied code.
 
 
+{{< pagebreak >}}
+
+
 ## Predicted versus observed plot
 
 Figure @fig-predobs shows the (unweighted) predicted versus observed results for each fitted variable.
 
 ![Predicted versus observed variables for best fitting model.](../../results/figures/pred-vs-obs-combined1.png){#fig-predobs}
+
+{{< pagebreak >}}
 
 
 ## Residual plots
@@ -79,11 +85,13 @@ Figure @fig-predobs shows the (unweighted) predicted versus observed results for
 Figures @fig-residual1 and @fig-residual2 show the weighted residual plots for the best fit model, one separated for each variable, and one combined.
 
 
-![Residual plot for best fitting model.](../../results/figures/residuals-nllweighted-panels1.png){#fig-residual1}
-
-![Residual plot for best fitting model.](../../results/figures/residuals-nllweighted-combined1.png){#fig-residual2}
+![Per-variable weighted residual plot for best fitting model.](../../results/figures/residuals-nllweighted-panels1.png){#fig-residual1}
 
 
+![Combined weighted residual plot for best fitting model.](../../results/figures/residuals-nllweighted-combined1.png){#fig-residual2}
+
+
+{{< pagebreak >}}
 
 
 
@@ -94,10 +102,12 @@ Figures @fig-residual1 and @fig-residual2 show the weighted residual plots for t
 
 
 
-![Time series of model simulations for 1, 10 and 100mg/kg dosing with treatment starting 2 days post infection.](../../results/figures/timeseries-d2tx.png){#fig-result-tx2}
+![Time series of model simulations for several dosing levels with treatment starting 2 days post infection.](../../results/figures/timeseries-d2tx.png){#fig-result-tx2}
 
-![Time series of model simulations for 1, 10 and 100mg/kg dosing with treatment starting 3 days post infection.](../../results/figures/timeseries-d3tx.png){#fig-result-tx3}
+![Time series of model simulations for several dosing levels with treatment starting 3 days post infection.](../../results/figures/timeseries-d3tx.png){#fig-result-tx3}
 
+
+{{< pagebreak >}}
 
 ## Time-series for reduced treatment regimens
 
@@ -106,12 +116,10 @@ Figures @fig-residual1 and @fig-residual2 show the weighted residual plots for t
 
 
 
-![Time series of model simulations for 1, 10 and 100mg/kg dosing with daily treatment starting on day 1 post infection.](../../results/figures/timeseries-dailytx.png){#fig-result-tx4}
+![Time series of model simulations for several dosing levels with daily treatment starting on day 1 post infection.](../../results/figures/timeseries-dailytx.png){#fig-result-tx4}
 
 
-
-
-![Time series of model simulations for 1, 10 and 100mg/kg dosing with a single treatment at day 1 post infection.](../../results/figures/timeseries-singletx.png){#fig-result-tx5}
+![Time series of model simulations for several dosing levels with a single treatment at day 1 post infection.](../../results/figures/timeseries-singletx.png){#fig-result-tx5}
 
 
 
