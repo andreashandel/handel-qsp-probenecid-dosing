@@ -23,9 +23,9 @@ dose_response_list = readRDS(here::here(
 # ---- Generate Figures ----
 # Custom x-axis ranges (dose in mg/kg) for each figure. Adjust as needed.
 x_axis_ranges <- list(
-  baseline = c(1e-3, 1e6),
-  txstart = c(1e-3, 1e6),
-  txinterval = c(1e-3, 1e6)
+  baseline = c(1e-2, 1e5),
+  txstart = c(1e-2, 1e5),
+  txinterval = c(1e-2, 1e5)
 )
 
 fig1 <- plot_outcomes(
