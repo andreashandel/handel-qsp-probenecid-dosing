@@ -268,9 +268,9 @@ n_workers <- 34 #number of workers for parallel processing
 
 # settings for optimizer
 #algname = "NLOPT_LN_COBYLA"
-algname = "NLOPT_LN_NELDERMEAD"
-#algname = "NLOPT_LN_SBPLX"
-maxsteps = 1000 #number of steps/iterations for algorithm
+#algname = "NLOPT_LN_NELDERMEAD"
+algname = "NLOPT_LN_SBPLX"
+maxsteps = 2000 #number of steps/iterations for algorithm
 maxtime = 10 * 60 * 60 #maximum time in seconds (h*m*s)
 ftol_rel = 1e-8
 
