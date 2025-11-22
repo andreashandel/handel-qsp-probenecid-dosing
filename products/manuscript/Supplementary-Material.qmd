@@ -36,11 +36,15 @@ It also contains additional results.
 
 All code and data needed to reproduce the results are provided as supplement.
 
-The data in a format that is ready for modeling is located in the `data ` folder. 
+The data in a format that is ready for modeling is located in the `processed-data` folder. 
 
-Scripts to fit the model to the data and run the simulations for different doses are located in the `analysis-code` folder. Code to generate figures and tables is located in the `plotting-code` folder.
+Code in the `analysis-code` folder contains all scripts needed to fit the model and run the simulations. Any code that starts with `run-` is used to run the model fitting or simulations. These main scripts call other the function files, which all end in `-functions.R`.
 
-NEEDS TO BE COMPLETED
+Results from the two `run-` scripts are saved in the `results\output` folder as `.Rds` files. 
+
+Code in the `plotting-code` folder contains all scripts to generate the figures and tables in the main text and supplement. Any file that starts with `make-` is used to generate specific figures/tables using the results from the prior scripts stored in the `results\output` folder. These scripts call other functions as needed, which all end in `-functions.R`. Figures and tables are saved in the `results\figures` and `results\tables` folders, respectively.
+
+To reproduce the results, run the two `run-` scripts in the `analysis-code` folder, first the fitting script, then the simulation script. After that, you can run the different `make` scripts in the `plotting-code` folder in any order.
 
 {{< pagebreak >}}
 
@@ -56,7 +60,7 @@ Estimates for parameter values that are fit to the model are provided in table @
 
 ```{r}
 #| label: tbl-parametertab
-#| tbl-cap: "Another fit table."
+#| tbl-cap: "Best fit estimates of model parameters. For units, see the main text. The main text also provides information on those parameters that were fixed."
 #| echo: FALSE
 resulttable1 = readRDS(here("results", "tables", "parametertab1.rds"))
 resulttable1

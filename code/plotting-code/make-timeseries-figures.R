@@ -17,7 +17,8 @@ source(here::here('code/plotting-code/timeseries-plot-function.R'))
 dose_results <- readRDS(here::here('results','output', 'dose-response-results.Rds'))
 
 # to get data for plotting best fit figures
-bestfit_list <- readRDS(here("results", "output", "bestfit.Rds"))
+bestfit_list <- readRDS(here("results", "output", "bestfit-single.Rds"))
+#bestfit_list <- readRDS(here("results", "output", "bestfit-sample.Rds"))
 
 
 # determine the dose levels for which full time-series were recorded

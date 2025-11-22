@@ -15,7 +15,7 @@ library(future.apply) #to do fits in parallel
 library(beepr) # to make a sound when fitting is done
 
 # this file contains the ODE model as a function
-source(here::here('code/analysis-code/model-simulator-function.R'))
+source(here::here('code/analysis-code/model-simulator-function-v2.R'))
 
 # function that performs a single fit iteration
 source(here::here('code/analysis-code/fit-model-function.R'))
@@ -36,16 +36,11 @@ n_workers <- 34 #number of workers for parallel processing - is ignored for nsam
 
 # load prior best fit, can be used as starting condition
 if (nsamp == 0) {
-  bestfitfile = 'bestfit-single.Rds'
+  bestfitfile = 'bestfit-single-v2.Rds'
 } else {
-  bestfitfile = 'bestfit-sample.Rds'
+  bestfitfile = 'bestfit-sample-v2.Rds'
 }
-# check if prior best fit file exists, then load
-if (file.exists(here::here('results', 'output', bestfitfile))) {
-    oldbestfit = readRDS(here::here('results', 'output', bestfitfile))
-} else {
-  oldbestfit = NULL
-}
+oldbestfit = readRDS(here::here('results', 'output', bestfitfile))
 
 
 # make Scenario an ordered factor
@@ -74,8 +69,6 @@ fitdata$xvals = fitdata$Day
 
 
 # starting values for variables
-U = 1e7 #from 2018 PCB paper
-I = 0
 V = 1 #assuming 1 virion to start
 F = 0 #no innate initially
 A = 0 #initial number of activated adaptive response
@@ -93,50 +86,47 @@ Y0 = c(Ad = Ad, Ac = Ac, At = At, U = U, I = I, V = V, F = F, A = A, S = S)
 # also defining low and high/upper bounds
 # see manuscript for their definitions
 ########################################
-b = 2e-8 # infection rate
-bl = 1e-15
-bh = 1e-2
-k = 5e-4 #adaptive response virus removal
+k = 1e-4 #adaptive response virus removal
 kl = 1e-10
 kh = 1e5
-p = 2755 #virus production rate
+p = 2e3 #virus production rate
 pl = 1e-3
 ph = 1e10
 kF = 1 #innate impact on virus production
-kFl = 1e-15
+kFl = 1e-10
 kFh = 1e3
-cV = 50 #virus clearance rate
+cV = 10 #virus clearance rate
 cVl = 0.01
 cVh = 1e6
 
 gF = 0.1 #max innate growth
 gFl = 1e-5
 gFh = 1e3
-hV = 10 # saturation for virus induction effect
+hV = 1e4 # saturation for virus induction effect
 hVl = 1e-7
 hVh = 1e8
-Fmax = 10 # max innate response
+Fmax = 5 # max innate response
 Fmaxl = 0.1
 Fmaxh = 1e4
-hF = 100 # T-cell induction response
+hF = 1 # T-cell induction response
 hFl = 1e-10
 hFh = 1e5
 gS = 10 #induction of symptoms by innate
 gSl = 1e-4
 gSh = 1e4
-cS = 0.5 # rate of symptom decline
+cS = 1 # rate of symptom decline
 cSl = 1e-5
 cSh = 1e4
 
 #PD
-Emax_F = 1 #strength of reduction of innate response by drug
+Emax_F = 0.5 #strength of reduction of innate response by drug
 Emax_Fl = 1e-3
 Emax_Fh = 1
-C50_F = 1e-7 #50% reduction on innnate
-C50_Fl = 1e-10
+C50_F = 1e-15 #50% reduction on innnate
+C50_Fl = 1e-17
 C50_Fh = 1e6
-C50_V = 2e-07 
-C50_Vl = 1e-10
+C50_V = 2.126060e-07 
+C50_Vl = 1e-15
 C50_Vh = 1e6
 
 
@@ -178,7 +168,6 @@ sigma_fixed <- sigma_all[setdiff(names(sigma_all), sigma_to_fit)]
 
 # combine all main fitted parameters into a vector
 par_ini_full = c(
-  b = b,
   k = k,
   p = p,
   kF = kF,
@@ -196,7 +185,6 @@ par_ini_full = c(
 
 # upper and lower bounds of parameters
 lb = as.numeric(c(
-  bl,
   kl,
   pl,
   kFl,
@@ -212,7 +200,6 @@ lb = as.numeric(c(
   C50_Vl
 ))
 ub = as.numeric(c(
-  bh,
   kh,
   ph,
   kFh,
@@ -240,7 +227,6 @@ names(ub) <- names(par_ini_full)
 
 # this is saved for later production of table
 parlabels = c(
-  b = "Virus infection rate",
   k = "Adaptive response clearance rate",
   p = "Virus production rate",
   kF = "Innate response supression strength",
@@ -262,13 +248,13 @@ parlabels = c(
 
 
 ###############################################################
-# optionally hold selected parameters fixed for testing.
+# NEW: optionally hold selected parameters fixed for testing.
 # Provide parameter names in `user_fixed_param_names` to exclude
 # them from the fitted vector and treat them as additional fixed
 # parameters later in the script. Example below fixes hV and C50_F.
 ###############################################################
 #user_fixed_params <- c()
-user_fixed_params <- c(p = 2755, Emax_F = 1, C50_F = 1e-10)
+user_fixed_params <- c(Emax_F = 1)
 if (length(user_fixed_params)) {
   missing_names <- setdiff(names(user_fixed_params), names(par_ini_full))
   
@@ -295,15 +281,15 @@ if (length(parlabels) != length(par_ini_full)) {
 
 # name of underlying model simulator, just used in exploratory phase
 #
-simulator = "simulate_model"
+simulator = "simulate_model_v2"
 
 
 
 # settings for optimizer
-algname = "NLOPT_LN_COBYLA"
+#algname = "NLOPT_LN_COBYLA"
 #algname = "NLOPT_LN_NELDERMEAD"
-#algname = "NLOPT_LN_SBPLX"
-maxsteps = 5000 #number of steps/iterations for algorithm
+algname = "NLOPT_LN_SBPLX"
+maxsteps = 1000 #number of steps/iterations for algorithm
 maxtime = 10 * 60 * 60 #maximum time in seconds (h*m*s)
 ftol_rel = 1e-8
 
@@ -381,29 +367,22 @@ eval_one_sample <- function(i, print_level) {
   # with the above values
 
   # assign par_ini to either oldbestfit[[i]]$solution or if that doesn't exist, assign oldbestfit[[1]]
-  if (is.null(oldbestfit)) {
-    par_ini_old = par_ini_full
+  if (i > length(oldbestfit)) {
+    par_ini_old = oldbestfit[[1]]$fitpars
   } else {
-    if (i > length(oldbestfit)) {
-      par_ini_old = oldbestfit[[1]]$fitpars
-    } else {
-      par_ini_old = oldbestfit[[i]]$fitpars
-    }
+    par_ini_old = oldbestfit[[i]]$fitpars
   }
-
   replace_idx <- intersect(names(par_ini_full), names(par_ini_old))
-  
-  # replace starting values for fitted parameters with those from old best fit
   par_ini_full[replace_idx] <- par_ini_old[replace_idx]
-  
-  #browser()
-
-  # manually adjust starting values for fitted parameters for testing purposes
-  #par_ini_full["Fmax"] = 2
 
   
   par_ini <- as.numeric(par_ini_full)
 
+  #browser()
+
+  #par_ini = c(6.4857896581302e-11, 0.00161358181366674, 31111314.9827666, 1.92313415018512e-07, 2184.74240316617, 0.00567819135935593, 0.00131484020692288, 97.2375066475568, 0.00119880351158823, 12.7983864240356, 0.223488842973654, 0.999999809502875, 1.00000016977163e-07, 7.71153090551312e-07, 0.130182376479872, 0.285280921007449, 6.25066476701104)
+
+  #names(par_ini) = names(par_ini_full)
 
   # ---- fit ----
   bestfit <- nloptr::nloptr(
@@ -514,7 +493,7 @@ print(objective_summary)
 
 
 # play a sound when done
-#beepr::beep(2)
+beepr::beep(2)
 
 # copy prior best fit to a new file if it exists
 if (file.exists(here::here('results', 'output', bestfitfile))) {

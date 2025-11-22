@@ -153,7 +153,8 @@ Since the lungs receive the full the entire blood flow from the heart [@jain2025
 
 Two distinct pharmacodynamic effects of probenecid were considered: antiviral and anti-inflammatory. Each mechanism was modeled using a direct response model with an Emax function, by which the drug concentration, is mapped to the corresponding effect [@goutelle2008]. 
 
-While the total concentration of the drug in the target compartment is given by $C_t = A_t/V_t$, probenecid binds to albumin, and only the unbound fraction of the drug, $C_u = f_u C_t$ is assumed to have a pharmacodynamic effect. For the central/plasma compartment, it was shown that the unbound fraction is concentration dependent [@emanuelsson1987; @emanuelsson1988]. A similar pattern is expected to hold for the target respiratory/lung compartment. To capture the reported concentration dependent binding pattern, we follow [@emanuelsson1987; @emanuelsson1988] and specify the fraction unbound as $f_u =  \frac{f_{max} C_{t}}{f_{50} + C_{t}}$, with $f_{max}$ the maximum fraction of unbound drug, and $f_{50}$ is the drug concentration at which binding is half-maximum. The two equations for the antiviral and anti-inflammatory effects are given by
+While the total concentration of the drug in the target compartment is given by $C_t = A_t/V_t$, probenecid binds to albumin, and only the unbound fraction of the drug, $C_u = f_u C_t$ is assumed to have a pharmacodynamic effect. For the central/plasma compartment, it was shown that the unbound fraction is concentration dependent [@emanuelsson1987; @emanuelsson1988]. A similar pattern is expected to hold for the target respiratory/lung compartment. To capture the reported concentration dependent binding pattern, we follow [@emanuelsson1987; @emanuelsson1988] and specify the fraction unbound as $f_u =  \frac{f_{max} C_{t}}{f_{50} + C_{t}}$, with $f_{max}$ the maximum fraction of unbound drug, and $f_{50}$ is the drug concentration at which binding is half-maximum. 
+We decided to model total amounts in the PK part of the model, and account for binding in the PD component of the model. With that, the two equations for the antiviral and anti-inflammatory effects are given by
 
 $$
 \begin{aligned}
@@ -297,7 +298,7 @@ As expected, @fig-dosepred3 illustrates that less frequent dosing requires highe
 
 ```{r}
 #| label: fig-dosepred3
-#| fig-cap: "Outcomes for different dosing frequencies. Compared to twice daily dosing, daily dosing leads to very similar results, and even single dosing does not lead to marked reduce of efficacy. Figures with the time-series of all variables for several dose levels for both daily and single dosing are shown in the supplement."
+#| fig-cap: "Outcomes for different dosing frequencies. Compared to twice daily dosing, daily dosing leads to some reduction in efficacy, and single dosing shows a pronounced drop in efficacy. Figures with the time-series of all variables for several dose levels for both daily and single dosing are shown in the supplement."
 #| echo: FALSE
 knitr::include_graphics(here(
   "results",
@@ -319,7 +320,8 @@ Model simulations showed that the impacts of dose on the viral load, immune resp
 
 The main limitations of our study are the lack of PK data and the fact that the available data came from studies in mice, which are not a natural host for influenza. Further, while we fixed several parameters to reduce the risk of over-fitting, and built our model based on biologically plausible processes, the exact equations are always unknown, and a different model formulation might produce somewhat different predictions, even after calibration with the same data. We also only had limited immune response data, and the model is fit to IL-6, as a proxy for the overall innate response. Further measurements of additional immune markers could further strengthen model discrimination.
 
-Overall, our modelling indicates that (i) early probenecid administration is critical, (ii) higher daily doses can somewhat offset reduced dosing frequency , and (iii) assuming transferability of the mouse system and model to humans, clinically achievable exposures should translate into meaningful reductions in viral burden and disease severity. Together with accumulating in-vitro and in-vivo evidence of broad antiviral activity, these findings support advancing probenecid into controlled influenza trials and showcase the value of QSP approaches in accelerating drug-repurposing campaigns.
+With these limitations in mind, we can cautiously suggest that if the mouse system results end up being transferable to humans, our modeling suggests that early probenecid administration is critical for optimal efficacy, and delays in treatment initiation cannot be fully compensated for by dose escalation. Further, less frequent dosing can lead to some reduction in efficacy, which can be partially offset by increased dosing levels. Third, clinically achievable exposures should translate into meaningful reductions in viral burden and disease severity.
+
 
 
 # Acknowledgements

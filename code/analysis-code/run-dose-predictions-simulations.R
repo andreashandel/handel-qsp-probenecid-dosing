@@ -15,7 +15,9 @@ library(future.apply) #to do fits in parallel
 
 source(here("code/analysis-code/dose-predictions-simulator-function.R"))
 
-bestfit_list <- readRDS(here("results", "output", "bestfit.Rds"))
+# load either single file (for testing) or file with all samples
+bestfit_list <- readRDS(here("results", "output", "bestfit-single.Rds"))
+#bestfit_list <- readRDS(here("results", "output", "bestfit-sample.Rds"))
 nsamp <- length(bestfit_list)
 simres_list = vector("list", nsamp)
 
