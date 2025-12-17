@@ -17,7 +17,9 @@ library(here)
 dose_results <- readRDS(here::here('results','output', 'dose-response-results.Rds'))
 
 # to get data for plotting best fit figures
-bestfit_list <- readRDS(here("results", "output", "bestfit.Rds"))
+bestfit_list <- readRDS(here("results", "output", "bestfit-single.Rds"))
+#bestfit_list <- readRDS(here("results", "output", "bestfit-sample.Rds"))
+
 
 # unpack helper objects from the dose-response results
 timeseries_doses <- attr(dose_results, "ts_doses")

@@ -29,6 +29,19 @@ fitdata = read.csv(file_path)
 pars_file = here::here('data/processed-data/fixed-parameters.csv')
 fixedparsdata = read.csv(pars_file)
 
+# number of samples
+nsamp = 0 # if this is 0, we only fit for the baseline values of the fixed parameters
+n_workers <- 34 #number of workers for parallel processing - is ignored for nsamp = 0
+
+
+# load prior best fit, can be used as starting condition
+if (nsamp == 0) {
+  bestfitfile = 'bestfit-single-v2.Rds'
+} else {
+  bestfitfile = 'bestfit-sample-v2.Rds'
+}
+oldbestfit = readRDS(here::here('results', 'output', bestfitfile))
+
 
 # make Scenario an ordered factor
 fitdata$Scenario = factor(
@@ -48,7 +61,7 @@ fitdata$Quantity = factor(
 # add Dose to fitdata dataframe
 # values should be 0, 10 and 100 for the three scenarios
 # this is in mg/kg
-# scaling to actual amount happens inside simulator 
+# scaling to actual amount happens inside simulator
 fitdata$Dose = c(0, 10, 100)[as.numeric(fitdata$Scenario)]
 
 # rename Day to xvals (by adding a column called xvals)
@@ -56,11 +69,9 @@ fitdata$xvals = fitdata$Day
 
 
 # starting values for variables
-U = 1e7 #from 2018 PCB paper
-I = 0
 V = 1 #assuming 1 virion to start
 F = 0 #no innate initially
-A = 1 #initial number of activated adaptive response
+A = 0 #initial number of activated adaptive response
 S = 0 #no symptoms
 Ad = 0 # no drug
 Ac = 0 #no drug
@@ -75,11 +86,8 @@ Y0 = c(Ad = Ad, Ac = Ac, At = At, U = U, I = I, V = V, F = F, A = A, S = S)
 # also defining low and high/upper bounds
 # see manuscript for their definitions
 ########################################
-b = 1e-8 # infection rate
-bl = 1e-12
-bh = 1e-2
 k = 1e-4 #adaptive response virus removal
-kl = 1e-8
+kl = 1e-10
 kh = 1e5
 p = 2e3 #virus production rate
 pl = 1e-3
@@ -89,41 +97,77 @@ kFl = 1e-10
 kFh = 1e3
 cV = 10 #virus clearance rate
 cVl = 0.01
-cVh = 1e5
+cVh = 1e6
 
 gF = 0.1 #max innate growth
-gFl = 1e-3
+gFl = 1e-5
 gFh = 1e3
 hV = 1e4 # saturation for virus induction effect
-hVl = 1e-5
+hVl = 1e-7
 hVh = 1e8
 Fmax = 5 # max innate response
 Fmaxl = 0.1
-Fmaxh = 1000
+Fmaxh = 1e4
 hF = 1 # T-cell induction response
-hFl = 1e-3
+hFl = 1e-10
 hFh = 1e5
 gS = 10 #induction of symptoms by innate
 gSl = 1e-4
 gSh = 1e4
 cS = 1 # rate of symptom decline
-cSl = 1e-2
+cSl = 1e-5
 cSh = 1e4
 
 #PD
 Emax_F = 0.5 #strength of reduction of innate response by drug
 Emax_Fl = 1e-3
 Emax_Fh = 1
-C50_F = 1 #50% reduction on innnate
-C50_Fl = 1e-7
+C50_F = 1e-15 #50% reduction on innnate
+C50_Fl = 1e-17
 C50_Fh = 1e6
-C50_V = 1 #50% reduction on virus
-C50_Vl = 1e-7
+C50_V = 2.126060e-07 
+C50_Vl = 1e-15
 C50_Vh = 1e6
+
+
+##########################
+# Code bits for additive or multiplicative errors
+##########################
+
+# Compute empirical variance per Quantity; small floor to avoid zero
+var_by_qty <- fitdata %>%
+  group_by(Quantity) %>%
+  summarize(v = var(Value, na.rm = TRUE), .groups = "drop")
+
+
+### set initial values for all six sigmas for additive and multiplicative errors params here 
+### any zero means that error term is not used
+
+sigma_all <- c(
+  sigma_add_LogVirusLoad = sqrt(as.numeric(var_by_qty[1, 2])),
+  sigma_prop_LogVirusLoad = 0.0,
+  sigma_add_IL6 = sqrt(as.numeric(var_by_qty[2, 2])),
+  sigma_prop_IL6 = 0.0,
+  sigma_add_WeightLossPerc = as.numeric(sqrt(var_by_qty[3, 2])),
+  sigma_prop_WeightLossPerc = 0.0
+)
+
+### choose which of the six to FIT (edit this vector as needed)
+sigma_to_fit <- c(
+  "sigma_add_LogVirusLoad",
+  "sigma_add_IL6",
+  "sigma_add_WeightLossPerc"
+  # e.g., add "sigma_prop_LogVirusLoad" here if you want to fit it, too
+)
+
+### split fitted vs fixed sigmas
+sigma_fit_ini <- sigma_all[sigma_to_fit]
+sigma_fixed <- sigma_all[setdiff(names(sigma_all), sigma_to_fit)]
+
+
 
 # combine all main fitted parameters into a vector
 par_ini_full = c(
-  b = b,
   k = k,
   p = p,
   kF = kF,
@@ -139,78 +183,8 @@ par_ini_full = c(
   C50_V = C50_V
 )
 
-# Compute empirical variance per Quantity; small floor to avoid zero
-var_by_qty <- fitdata %>%
-  group_by(Quantity) %>%
-  summarize(v = var(Value, na.rm = TRUE), .groups = "drop")
-
-
-### NEW/CHANGED: define ALL six sigma params here (initial values)
-sigma_all <- c(
-  sigma_add_LogVirusLoad = sqrt(as.numeric(var_by_qty[1, 2])),
-  sigma_prop_LogVirusLoad = 0.0,
-  sigma_add_IL6 = sqrt(as.numeric(var_by_qty[2, 2])),
-  sigma_prop_IL6 = 0.0,
-  sigma_add_WeightLossPerc = as.numeric(sqrt(var_by_qty[3, 2])),
-  sigma_prop_WeightLossPerc = 0.0
-)
-
-### NEW/CHANGED: choose which of the six to FIT (edit this vector as needed)
-sigma_to_fit <- c(
-  "sigma_add_LogVirusLoad",
-  "sigma_add_IL6",
-  "sigma_add_WeightLossPerc"
-  # e.g., add "sigma_prop_LogVirusLoad" here if you want to fit it, too
-)
-
-
-### NEW/CHANGED: split fitted vs fixed sigmas
-sigma_fit_ini <- sigma_all[sigma_to_fit]
-sigma_fixed <- sigma_all[setdiff(names(sigma_all), sigma_to_fit)]
-
-### add the fitted sigmas to the fitted parameter vector
-par_ini_full <- c(par_ini_full, sigma_fit_ini)
-
-par_ini <- as.numeric(par_ini_full)
-fitparnames <- names(par_ini_full)
-
-
-# this is saved for later production of table
-parlabels = c(
-  "Virus infection rate",
-  "Adaptive response clearance rate",
-  "Virus production rate",
-  "Innate response supression strength",
-  "Virus removal rate",
-  "Maximum innate response induction",
-  "Maximum innate response",
-  "Adaptive response half-maximum induction",
-  "Symptom induction rate",
-  "Symptom decay rate",
-  "Maximum innate response supression",
-  "Half maximum of innate response effect",
-  "Half maximum of virus suppression effect",
-  "Sigma of LogVirusLoad",
-  "Simga of IL6",
-  "Sigma of WeightLossPerc"
-)
-
-
-# starting values either from best fit values of previous run or values above
-# can be commented out if one wants to start
-# with the above values
-oldbestfit = readRDS(here::here('results', 'output', 'bestfit-v2.Rds'))
-par_ini = as.numeric(oldbestfit[[1]]$solution)
-names(par_ini) = oldbestfit[[1]]$fitparnames
-#par_ini = c(3.32766301944983e-11, 5.45260032671489e-05, 27326504.6343563, 8.24677598056875e-09, 999.907338441145, 0.00692431092320305, 0.001, 99.6474912276584, 0.0414260036390491, 15.4904715802177, 0.440522208757901, 0.873900784371844, 1.00000173918664e-07, 2.17563625459632e-07, 4.79273603596189, 0.408452788642187, 5.76713262995559)
-
-#par_ini = c(4.17739420172487e-09, 1e-4, 1422.70435873915, 5.92093154571912, 14.3783444407116, 0.182348375038655, 4.96479047728558, 198.357614832832, 47.8680927299117, 1.64835677299124, 0.00585349784837397, 976691.017114225, 0.00273524595596376, 4.79273603596189, 0.408452788642187, 5.76713262995559)
-  
-  
-
 # upper and lower bounds of parameters
 lb = as.numeric(c(
-  bl,
   kl,
   pl,
   kFl,
@@ -226,7 +200,6 @@ lb = as.numeric(c(
   C50_Vl
 ))
 ub = as.numeric(c(
-  bh,
   kh,
   ph,
   kFh,
@@ -242,27 +215,75 @@ ub = as.numeric(c(
   C50_Vh
 ))
 
+### add the fitted sigmas to the fitted parameter vector
+par_ini_full <- c(par_ini_full, sigma_fit_ini)
 ### append bounds for the sigmas
 lb <- c(lb, rep(1e-6, length(sigma_fit_ini)))
 ub <- c(ub, rep(1e3, length(sigma_fit_ini)))
 
+# give bounds the same names as the fit parameter vector
+names(lb) <- names(par_ini_full)
+names(ub) <- names(par_ini_full)
 
-# check bounds. if initial conditions are outside bounds, give a warning and adjust to bound.
-if (sum((ub - par_ini) < 0) > 0) {
-  print(
-    "Warning: initial value is larger than upper bound, setting it to upper bound"
-  )
-  #par_ini = pmin(ub, par_ini)
-}
-if (sum((par_ini - lb) < 0) > 0) {
-  print(
-    "Warning: initial value is smaller than lower bound, setting it to lower bound"
-  )
-  #par_ini = pmax(lb, par_ini)
+# this is saved for later production of table
+parlabels = c(
+  k = "Adaptive response clearance rate",
+  p = "Virus production rate",
+  kF = "Innate response supression strength",
+  cV = "Virus removal rate",
+  gF = "Maximum innate response induction",
+  hV = "Adaptive response half-maximum induction",
+  Fmax = "Maximum innate response",
+  hF = "Adaptive response half-maximum induction",
+  gS = "Symptom induction rate",
+  cS = "Symptom decay rate",
+  Emax_F = "Maximum drug effect on innate response",
+  C50_F = "Half maximum of innate response effect",
+  C50_V = "Half maximum of virus suppression effect",
+  sigma_add_LogVirusLoad = "Sigma of LogVirusLoad",
+  sigma_add_IL6 = "Simga of IL6",
+  sigma_add_WeightLossPerc = "Sigma of WeightLossPerc"
+)
+
+
+
+###############################################################
+# NEW: optionally hold selected parameters fixed for testing.
+# Provide parameter names in `user_fixed_param_names` to exclude
+# them from the fitted vector and treat them as additional fixed
+# parameters later in the script. Example below fixes hV and C50_F.
+###############################################################
+#user_fixed_params <- c()
+user_fixed_params <- c(Emax_F = 1)
+if (length(user_fixed_params)) {
+  missing_names <- setdiff(names(user_fixed_params), names(par_ini_full))
+  
+  par_ini_full <- par_ini_full[setdiff(names(par_ini_full), names(user_fixed_params))]
+  # also adjust bounds vectors
+  lb <- lb[setdiff(names(par_ini_full), names(user_fixed_params))]
+  ub <- ub[setdiff(names(par_ini_full), names(user_fixed_params))]
 }
 
-# number of samples
-nsamp = 0 # if this is 0, we only fit for the baseline values of the fixed parameters
+fitparnames <- names(par_ini_full)
+
+
+# keep labels only for parameters still being fitted
+parlabels <- parlabels[fitparnames]
+if (any(is.na(parlabels))) {
+  stop("Parlabel definitions missing entries for some fitted parameters.")
+}
+
+if (length(parlabels) != length(par_ini_full)) {
+  stop("length of parlabels does not match length of par_ini")
+}
+
+
+
+# name of underlying model simulator, just used in exploratory phase
+#
+simulator = "simulate_model_v2"
+
+
 
 # settings for optimizer
 #algname = "NLOPT_LN_COBYLA"
@@ -287,6 +308,11 @@ dt = 0.02 # time step for which we want results returned
 # the object was loaded at the beginning of the script
 fixedpars = fixedparsdata[, 3]
 names(fixedpars) = fixedparsdata[, 1]
+
+# append any user-specified fixed parameters 
+if (length(user_fixed_params)) {
+  fixedpars <- c(fixedpars, user_fixed_params)
+}
 
 
 # always add baseline as sample to fit
@@ -313,7 +339,7 @@ samples_list <- lapply(samples_list, function(x) {
   x
 })
 
-### NEW/CHANGED: append the FIXED sigmas (NOT sampled) to each fixed-pars sample
+### append the FIXED sigmas (NOT sampled) to each fixed-pars sample
 samples_list <- lapply(samples_list, function(x) c(x, sigma_fixed))
 
 # make an empty list of length nsamp + 1 (always fit baseline)
@@ -336,9 +362,34 @@ eval_one_sample <- function(i, print_level) {
 
   fixedpars_i <- samples_list[[i]]
 
+  # starting values either from best fit values of previous run or values above
+  # can be commented out if one wants to start
+  # with the above values
+
+  # assign par_ini to either oldbestfit[[i]]$solution or if that doesn't exist, assign oldbestfit[[1]]
+  if (i > length(oldbestfit)) {
+    par_ini_old = oldbestfit[[1]]$fitpars
+  } else {
+    par_ini_old = oldbestfit[[i]]$fitpars
+  }
+  replace_idx <- intersect(names(par_ini_full), names(par_ini_old))
+  par_ini_full[replace_idx] <- par_ini_old[replace_idx]
+
+  
+  par_ini <- as.numeric(par_ini_full)
+
+  #browser()
+
+  #par_ini = c(6.4857896581302e-11, 0.00161358181366674, 31111314.9827666, 1.92313415018512e-07, 2184.74240316617, 0.00567819135935593, 0.00131484020692288, 97.2375066475568, 0.00119880351158823, 12.7983864240356, 0.223488842973654, 0.999999809502875, 1.00000016977163e-07, 7.71153090551312e-07, 0.130182376479872, 0.285280921007449, 6.25066476701104)
+
+  #names(par_ini) = names(par_ini_full)
+
   # ---- fit ----
-  bestfit <- nloptr::nloptr( x0 = par_ini,
-    eval_f = fit_model_function, lb = lb, ub = ub,
+  bestfit <- nloptr::nloptr(
+    x0 = par_ini,
+    eval_f = fit_model_function,
+    lb = lb,
+    ub = ub,
     opts = list(
       algorithm = algname,
       maxeval = maxsteps,
@@ -354,7 +405,8 @@ eval_one_sample <- function(i, print_level) {
     doses = unique(fitdata$Dose),
     scenarios = scenarios,
     solvertype = solvertype,
-    tols = tols
+    tols = tols,
+    simulator = simulator
   )
   # finished with fitting
   # doing some after fitting stuff
@@ -382,7 +434,6 @@ eval_one_sample <- function(i, print_level) {
 # do things either in parallel or not
 #########################################
 if (length(samples_list) > 1) {
-  n_workers <- 25
   workers <- min(n_workers, future::availableCores())
   print_level <- 0
   future::plan(multisession, workers = workers)
@@ -414,30 +465,43 @@ cat('model fit took this many minutes:', runtime_minutes, '\n')
 cat('************** \n')
 cat('used algorithm: ', algname, '\n')
 cat('************** \n')
-# Safe print (won’t error if oldbestfit wasn’t loaded)
-if (exists("oldbestfit")) {
-  cat('initial objective function: ', oldbestfit[[1]]$objective, '\n')
+
+# put the old and new objective function values together in a two-column data frame
+old_objectives <- if (exists("oldbestfit")) {
+  vapply(
+    seq_along(bestfit_all),
+    function(i) {
+      if (!is.null(oldbestfit[[i]])) {
+        oldbestfit[[i]]$objective
+      } else {
+        NA_real_
+      }
+    },
+    numeric(1)
+  )
 } else {
-  cat('initial objective function: (no previous run loaded)\n')
+  rep(NA_real_, length(bestfit_all))
 }
-cat('************** \n')
-cat('final objective functions: ', '\n')
-# print all objective function values for each sample
-for (i in 1:(nsamp + 1)) {
-  print(bestfit_all[[i]]$objective)
-}
+new_objectives <- vapply(bestfit_all, function(x) x$objective, numeric(1))
+objective_summary <- data.frame(
+  old_objective = old_objectives,
+  new_objective = new_objectives,
+  improvement = old_objectives - new_objectives
+)
+
+print(objective_summary)
+
+
 # play a sound when done
 beepr::beep(2)
-# statement that prints best fit parameter values as vector
-print(bestfit_all[[1]]$parstring)
 
 # copy prior best fit to a new file if it exists
-if (file.exists(here::here('results', 'output', 'bestfit-v2.Rds'))) {
+if (file.exists(here::here('results', 'output', bestfitfile))) {
   file.copy(
-    from = here::here('results', 'output', 'bestfit-v2.Rds'),
-    to = here::here('results', 'output', 'oldbestfit-v2.Rds'),
+    from = here::here('results', 'output', bestfitfile),
+    to = here::here('results', 'output', paste0('old',bestfitfile)),
     overwrite = TRUE
   )
 }
 # save new best fit
-saveRDS(bestfit_all, here::here('results', 'output', 'bestfit-v2.Rds'))
+saveRDS(bestfit_all, here::here('results', 'output', bestfitfile))

@@ -82,7 +82,7 @@ fit_model_function <- function(
         Ad0 = doses[i],
         txstart = 1,
         txinterval = 0.5,
-        txend = 4,
+        txend = 3.9, # last dose at day 3.5, so need a value just below 4 to prevent another day 4 dose being simulated
         tstart = 0,
         tfinal = tfinal,
         dt = dt,

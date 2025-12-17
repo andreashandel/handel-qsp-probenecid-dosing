@@ -88,8 +88,8 @@ fit_param_defaults <- c(
   gS = 10,
   cS = 1,
   Emax_F = 1,
-  C50_F = 1e-15,
-  C50_V = 2e-7
+  C50_F = 1e-10,
+  C50_V = 1e-10
 )
 
 fit_param_bounds <- data.frame(
@@ -261,7 +261,7 @@ sigma_fixed_labels <- c(
 solvertype <- "vode"
 tols <- 1e-9
 tfinal <- 7
-dt <- 0.02
+dt <- 0.002
 
 param_input_id <- function(name) paste0("par_", name)
 fixed_input_id <- function(name) paste0("fixed_", name)
@@ -297,7 +297,7 @@ run_model_once <- function(params, fixedpars, Y0_vals, simulator) {
   fixedpars_ode <- fixedpars[!grepl("^sigma_", names(fixedpars))]
 
   simulate_one <- function(ad0, scenario_label) {
-    args <- c(
+    allpars <- c(
       as.list(Y0_vals),
       as.list(params_ode),
       as.list(fixedpars_ode),
@@ -314,16 +314,33 @@ run_model_once <- function(params, fixedpars, Y0_vals, simulator) {
       )
     )
 
-    odeout <- tryCatch(do.call(simulator, args), error = identity)
+    odeout <- tryCatch(do.call(simulator, allpars), error = identity)
 
     if (inherits(odeout, "error")) {
       return(odeout)
     }
 
-    df <- as.data.frame(odeout)
-    df$Dose <- ad0
-    df$Scenario <- factor(scenario_label, levels = scenarios)
-    df
+    ode_df <- as.data.frame(odeout)
+
+    Ct <- ode_df$At / as.numeric(allpars["Vt"])
+    fu <- as.numeric(allpars["fmax"]) * Ct / (as.numeric(allpars["f50"]) + Ct)
+    Cu <- fu * Ct
+    fV <- as.numeric(allpars["Emax_V"]) * Cu / (as.numeric(allpars["C50_V"]) + Cu) # effect of drug on virus
+    fF <- as.numeric(allpars["Emax_F"]) * Cu / (as.numeric(allpars["C50_F"]) + Cu) # effect of drug on innate
+
+    vprod <- (1 - fV) * as.numeric(allpars["p"]) * ode_df$I / (1 + as.numeric(allpars["kF"]) * ode_df$F) 
+
+    ode_df$Cu <- Cu 
+    ode_df$fV <- fV
+    ode_df$fF <- vprod
+
+
+
+    ode_df$Dose <- ad0
+    ode_df$Scenario <- factor(scenario_label, levels = scenarios)
+    # add Cu, fV and fF
+
+    return(ode_df)
   }
 
   sim_list <- lapply(seq_along(doses), function(i) {

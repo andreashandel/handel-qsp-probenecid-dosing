@@ -93,51 +93,51 @@ Y0 = c(Ad = Ad, Ac = Ac, At = At, U = U, I = I, V = V, F = F, A = A, S = S)
 # also defining low and high/upper bounds
 # see manuscript for their definitions
 ########################################
-b = 2e-8 # infection rate
-bl = 1e-15
-bh = 1e-2
-k = 5e-4 #adaptive response virus removal
+b = 1e-8 # infection rate
+bl = 1e-12
+bh = 1e-5
+k = 1e-5 #adaptive response virus removal
 kl = 1e-10
-kh = 1e5
-p = 2755 #virus production rate
-pl = 1e-3
-ph = 1e10
-kF = 1 #innate impact on virus production
-kFl = 1e-15
-kFh = 1e3
-cV = 50 #virus clearance rate
-cVl = 0.01
-cVh = 1e6
+kh = 1
+p = 1e4 #virus production rate
+pl = 1
+ph = 1e7
+kF = 0.1 #innate impact on virus production
+kFl = 1e-1
+kFh = 1e2
+cV = 100 #virus clearance rate
+cVl = 0.1
+cVh = 1e5
 
-gF = 0.1 #max innate growth
-gFl = 1e-5
+gF = 1 #max innate growth
+gFl = 1e-3
 gFh = 1e3
-hV = 10 # saturation for virus induction effect
-hVl = 1e-7
-hVh = 1e8
-Fmax = 10 # max innate response
+hV = 1e3 # saturation for virus induction effect
+hVl = 1e-2
+hVh = 1e5
+Fmax = 2 # max innate response
 Fmaxl = 0.1
-Fmaxh = 1e4
-hF = 100 # T-cell induction response
-hFl = 1e-10
-hFh = 1e5
+Fmaxh = 1e3
+hF = 1 # T-cell induction response
+hFl = 1e-5
+hFh = 1e3
 gS = 10 #induction of symptoms by innate
-gSl = 1e-4
-gSh = 1e4
-cS = 0.5 # rate of symptom decline
-cSl = 1e-5
-cSh = 1e4
+gSl = 1e-3
+gSh = 1e3
+cS = 1 # rate of symptom decline
+cSl = 1e-3
+cSh = 1e3
 
 #PD
 Emax_F = 1 #strength of reduction of innate response by drug
 Emax_Fl = 1e-3
 Emax_Fh = 1
-C50_F = 1e-7 #50% reduction on innnate
+C50_F = 1e-5 #50% reduction on innnate
 C50_Fl = 1e-10
-C50_Fh = 1e6
-C50_V = 2e-07 
+C50_Fh = 1e2
+C50_V = 1e-8 
 C50_Vl = 1e-10
-C50_Vh = 1e6
+C50_Vh = 1e2
 
 
 ##########################
@@ -164,9 +164,9 @@ sigma_all <- c(
 
 ### choose which of the six to FIT (edit this vector as needed)
 sigma_to_fit <- c(
-  "sigma_add_LogVirusLoad",
-  "sigma_add_IL6",
-  "sigma_add_WeightLossPerc"
+  #"sigma_add_LogVirusLoad",
+  #"sigma_add_IL6",
+  #"sigma_add_WeightLossPerc"
   # e.g., add "sigma_prop_LogVirusLoad" here if you want to fit it, too
 )
 
@@ -268,7 +268,8 @@ parlabels = c(
 # parameters later in the script. Example below fixes hV and C50_F.
 ###############################################################
 #user_fixed_params <- c()
-user_fixed_params <- c(p = 2755, Emax_F = 1, C50_F = 1e-10)
+#user_fixed_params <- c(Emax_F = 1, hF = 1)
+user_fixed_params <- c(Emax_F = 1, hF = 1, p = 210)
 if (length(user_fixed_params)) {
   missing_names <- setdiff(names(user_fixed_params), names(par_ini_full))
   
@@ -303,12 +304,13 @@ simulator = "simulate_model"
 algname = "NLOPT_LN_COBYLA"
 #algname = "NLOPT_LN_NELDERMEAD"
 #algname = "NLOPT_LN_SBPLX"
-maxsteps = 5000 #number of steps/iterations for algorithm
+maxsteps = 1000 #number of steps/iterations for algorithm
 maxtime = 10 * 60 * 60 #maximum time in seconds (h*m*s)
 ftol_rel = 1e-8
 
 # settings for ODE solver
-solvertype = "vode"
+solvertype = "lsoda"
+#solvertype = "vode"
 tols = 1e-9
 tfinal = 7 #time of last data point
 dt = 0.02 # time step for which we want results returned
@@ -380,7 +382,7 @@ eval_one_sample <- function(i, print_level) {
   # can be commented out if one wants to start
   # with the above values
 
-  # assign par_ini to either oldbestfit[[i]]$solution or if that doesn't exist, assign oldbestfit[[1]]
+  # assign par_ini to either oldbestfit[[i]]$fitpars or if that doesn't exist, assign oldbestfit[[1]]$fitpars
   if (is.null(oldbestfit)) {
     par_ini_old = par_ini_full
   } else {
@@ -524,5 +526,9 @@ if (file.exists(here::here('results', 'output', bestfitfile))) {
     overwrite = TRUE
   )
 }
+
 # save new best fit
-saveRDS(bestfit_all, here::here('results', 'output', bestfitfile))
+if (objective_summary$improvement[1] > 0) {
+  saveRDS(bestfit_all, here::here('results', 'output', bestfitfile))
+}
+

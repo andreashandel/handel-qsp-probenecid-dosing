@@ -75,6 +75,7 @@ simulate_dose_predictions <- function(bestfit, ts_doses, solvertype, tols, dt, t
         tols = tols
       )
     )
+      
     # odeout <- try(do.call(simulate_model, allpars), silent = TRUE)
     #   if (inherits(odeout, "try-error") || length(odeout) == 1) {
     #     message("Integrator error – ", schedule_name, " (dose ", all_doses[i], ")")
@@ -84,7 +85,19 @@ simulate_dose_predictions <- function(bestfit, ts_doses, solvertype, tols, dt, t
     odeout <- do.call(simulate_model, allpars)
     
 
-      ode_df <- as.data.frame(odeout)
+
+    ode_df <- as.data.frame(odeout)
+      
+    # add free drug and PD effect variables for plotting; mirror ODE definitions
+    Ct <- ode_df$At / as.numeric(allpars["Vt"])
+    fu <- as.numeric(allpars["fmax"]) * Ct / (as.numeric(allpars["f50"]) + Ct)
+    Cu <- fu * Ct
+    fV <- as.numeric(allpars["Emax_V"]) * Cu / (as.numeric(allpars["C50_V"]) + Cu) # effect of drug on virus
+    fF <- as.numeric(allpars["Emax_F"]) * Cu / (as.numeric(allpars["C50_F"]) + Cu) # effect of drug on innate
+    ode_df$Cu <- Cu 
+    ode_df$fV <- fV
+    ode_df$fF <- fF 
+       
 
       # ---- AUCs --------------------------------------------------------------
       summary_df$AUCV[i] <- caTools::trapz(
@@ -120,14 +133,16 @@ simulate_dose_predictions <- function(bestfit, ts_doses, solvertype, tols, dt, t
   tfinal <- 7
   all_doses <- sort(unique(c(ts_doses, 10^seq(-2, 5, length = 100)))) #making sure we include ts_doses
 
-  params <- bestfit$solution
-  names(params) <- bestfit$fitparnames
+  #params <- bestfit$solution
+  #names(params) <- bestfit$fitparnames
+  fitpars <- bestfit$fitpars
+  #names(params) <- bestfit$fitparnames
   fixedpars <- bestfit$fixedpars
   Y0 <- bestfit$Y0
 
 # pull out fitted parameters that are part of the ODE, excluding the sigmas
-  fit_sigmas <- grepl("^sigma_(add|prop)_", names(params))
-  fitpars_ode = params[!fit_sigmas]
+  fit_sigmas <- grepl("^sigma_(add|prop)_", names(fitpars))
+  fitpars_ode = fitpars[!fit_sigmas]
 
   # pull out fixed parameters that are part of the ODE, excluding the sigmas
   fixed_sigmas <- grepl("^sigma_(add|prop)_", names(fixedpars))
@@ -140,10 +155,10 @@ simulate_dose_predictions <- function(bestfit, ts_doses, solvertype, tols, dt, t
   # each schedule is a different treatment regimen shown in the main text
   #############################################################################
   schedule_defs <- list(
-    s1 = list(txstart = 1, txend = 4, txinterval = 0.5, name = "s1"), # baseline, as done in experiment
-    s2 = list(txstart = 2, txend = 5, txinterval = 0.5, name = "s2"), # treatment start at day 2
-    s3 = list(txstart = 3, txend = 6, txinterval = 0.5, name = "s3"), # treatment start at day 3
-    s4 = list(txstart = 1, txend = 4, txinterval = 1, name = "s4"), # daily dosing
+    s1 = list(txstart = 1, txend = 3.9, txinterval = 0.5, name = "s1"), # baseline, as done in experiment
+    s2 = list(txstart = 2, txend = 4.9, txinterval = 0.5, name = "s2"), # treatment start at day 2
+    s3 = list(txstart = 3, txend = 5.9, txinterval = 0.5, name = "s3"), # treatment start at day 3
+    s4 = list(txstart = 1, txend = 3.9, txinterval = 1, name = "s4"), # daily dosing
     s5 = list(txstart = 1, txend = 1, txinterval = 1, name = "s5") # single dosing
   )
 

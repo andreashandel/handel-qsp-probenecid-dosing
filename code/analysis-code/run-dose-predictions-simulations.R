@@ -33,12 +33,16 @@ plan(multisession, workers = workers)
 
 
 # settings to be passed to simulator function
-solvertype <- "vode"
-tols <- 1e-9
+solvertype = "lsoda"
+#solvertype = "vode"
+tols = 1e-9
 dt <- 0.01
 tfinal <- 7
 
+# run parallel if more than 1 sample
 
+if (nsamp > 1) {
+  
 simres_list <- future_lapply(
   seq_len(nsamp),
   function(i) {
@@ -48,9 +52,13 @@ simres_list <- future_lapply(
   },
   future.seed = TRUE
 )
-
 # switch back to sequential when done
 plan(sequential)
+} else
+{
+  simres_list[[1]] <- simulate_dose_predictions(bestfit_list[[1]], ts_doses = timeseries_doses, solvertype = solvertype, tols = tols, dt = dt, tfinal = tfinal)
+}
+
 
 # attach the selected doses as metadata for downstream scripts
 attr(simres_list, "ts_doses") <- timeseries_doses

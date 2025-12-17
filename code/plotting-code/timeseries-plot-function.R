@@ -194,6 +194,9 @@ plot_timeseries <- function(
   ad_limits <- compute_limits("Ad", logy = TRUE)
   ac_limits <- compute_limits("Ac", logy = TRUE)
   at_limits <- compute_limits("At", logy = TRUE)
+  cu_limits <- compute_limits("Cu", logy = TRUE)
+  fV_limits <- c(0.9999,1)
+  fF_limits <- c(1e-8,1e8)
 
   ## -------------------------------------------------------------------------
   ## Re-usable panel builder
@@ -394,12 +397,46 @@ plot_timeseries <- function(
     tmax = tmax
   )
 
+  p_cu <- plot_template(
+    modelfit,
+    NULL,
+    "time",
+    "Cu",
+    "free Drug conc",
+    logy = TRUE,
+    ylimits = cu_limits,
+    tmax = tmax
+  )
+  p_fV <- plot_template(
+    modelfit,
+    NULL,
+    "time",
+    "fV",
+    "fV",
+    logy = FALSE,
+    ylimits = fV_limits,
+   tmax = tmax
+  )
+  p_fF <- plot_template(
+    modelfit,
+    NULL,
+    "time",
+    "fF",
+    "fF",
+    logy = TRUE,
+    ylimits = fF_limits,
+    tmax = tmax
+  )
+
+
   ## -------------------------------------------------------------------------
   ## Assemble, collect legend, add global x-axis label
   ## -------------------------------------------------------------------------
   combined_plot <- (p_uc | p_ic | p_vir) /
     (p_inn | p_ada | p_sym) /
     (p_ad | p_ac | p_at) +
+    (p_cu | p_fV | p_fF) +
+    
     plot_layout(guides = "collect") &
     theme(
       legend.position = "top",

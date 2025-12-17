@@ -23,17 +23,17 @@ simulate_model <- function(Ad, Ac, At, U, I, V, F, A, S,
         # dosing occurs at discrete times via the callback function in the main script
         dAd = -ka * Ad #depot
         dAc = ka * Ad - Q / Vc * Ac + Q / Vt * At - Vmax * Ac / (Km * Vc + Ac) #central compartment
-        dAt = Q / Vc * Ac - Q / Vt * At #taret site
+        dAt = Q / Vc * Ac - Q / Vt * At #target site
 
         # drug PD
         Ct = At / Vt
         fu = fmax * Ct / (f50 + Ct)
         Cu = fu * Ct #drug concentration in tissue compartment
-        f_V = Emax_V * Cu / (C50_V + Cu) #effect of drug on virus
-        f_F = Emax_F * Cu / (C50_F + Cu) #effect of drug on innate
-        #f_V = Emax_V  #effect of drug on virus
-        #f_F = Emax_F  #effect of drug on innate
-
+        fV = Emax_V * Cu / (C50_V + Cu) #effect of drug on virus
+        fF = Emax_F * Cu / (C50_F + Cu) #effect of drug on innate
+        #fV = 0.9  #effect of drug on virus
+        #fF = 0.9  #effect of drug on innate
+       
         
         # avoid virus to go to very low levels and then rebound
         # is biologically unreasonable since very low virus means clearance
@@ -43,20 +43,22 @@ simulate_model <- function(Ad, Ac, At, U, I, V, F, A, S,
         # unclear how that exactly translates to number of infectious virus particles
         # thus setting some low but reasonable threshold
         # see my 2007 PCB paper for more discussions
-        # if (V < 1e-3) {
+        # if (V < 0) {
         #   V <- 0
         #   dV <- 0
         # } else {
-        #   dV = (1 - f_V) * p * I / (1 + kF * F) - cV * V #virus
+        #   dV = (1 - fV) * p * I / (1 + kF * F) - cV * V #virus
         # }
-        dV = (1 - f_V) * p * I / (1 + kF * F) - cV * V #virus
+        # if (V<0) {
+        #   browser()
+        # }
 
         # define system of ODEs
         dU = -b * U * V #uninfected cells
         dI = b * U * V - cI * I - k * I * A #infected cells
-        dF = (1 - f_F) * gF * (V / (V + hV)) * (Fmax - F) - cF * F #innate response
+        dV = (1 - fV) * p * I / (1 + kF * F) - cV * V #virus
+        dF = (1 - fF) * gF * (V / (V + hV)) * (Fmax - F) - cF * F #innate response
         dA = V * F / (V * F + hF) + gA * A #adaptive response
-        #dA =  F / ( F + hF) + gA * A #adaptive response
         dS = gS * F - cS * S #symptoms
 
         list(c(dAd, dAc, dAt, dU, dI, dV, dF, dA, dS))
