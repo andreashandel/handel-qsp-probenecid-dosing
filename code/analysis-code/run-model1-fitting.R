@@ -15,10 +15,10 @@ library(future.apply) #to do fits in parallel
 library(beepr) # to make a sound when fitting is done
 
 # this file contains the ODE model as a function
-source(here::here('code/analysis-code/model-simulator-function.R'))
+source(here::here('code/analysis-code/model1-simulator-function.R'))
 
 # function that performs a single fit iteration
-source(here::here('code/analysis-code/fit-model-function.R'))
+source(here::here('code/analysis-code/model1-fit-function.R'))
 
 #load and process data
 file_path = here::here("data/processed-data/processeddata.csv")
@@ -26,7 +26,7 @@ fitdata = read.csv(file_path)
 
 # load fixed parameters from file
 # this does not include potentially fixed parameters for error distributions (i.e. the sigmas)
-pars_file = here::here('data/processed-data/fixed-parameters.csv')
+pars_file = here::here('data/processed-data/model1-fixed-parameters.csv')
 fixedparsdata = read.csv(pars_file)
 
 # number of samples
@@ -36,9 +36,9 @@ n_workers <- 34 #number of workers for parallel processing - is ignored for nsam
 
 # load prior best fit, can be used as starting condition
 if (nsamp == 0) {
-  bestfitfile = 'bestfit-single.Rds'
+  bestfitfile = 'model1-bestfit-single.Rds'
 } else {
-  bestfitfile = 'bestfit-sample.Rds'
+  bestfitfile = 'model1-bestfit-sample.Rds'
 }
 # check if prior best fit file exists, then load
 if (file.exists(here::here('results', 'output', bestfitfile))) {
@@ -268,8 +268,8 @@ parlabels = c(
 # parameters later in the script. Example below fixes hV and C50_F.
 ###############################################################
 #user_fixed_params <- c()
-#user_fixed_params <- c(Emax_F = 1, hF = 1)
-user_fixed_params <- c(Emax_F = 1, hF = 1, p = 210)
+user_fixed_params <- c(Emax_F = 1)
+#user_fixed_params <- c(Emax_F = 1, hF = 1, p = 210)
 if (length(user_fixed_params)) {
   missing_names <- setdiff(names(user_fixed_params), names(par_ini_full))
   
@@ -294,23 +294,26 @@ if (length(parlabels) != length(par_ini_full)) {
 
 
 
-# name of underlying model simulator, just used in exploratory phase
-#
-simulator = "simulate_model"
+# name of underlying model simulator function
+simulatorname = "model1_simulator"
 
 
 
 # settings for optimizer
-algname = "NLOPT_LN_COBYLA"
+#algname = "NLOPT_LN_COBYLA"
+#algname = "NLOPT_LN_BOBYQA"
+algname = "NLOPT_LN_NEWUOA"
+#algname = "NLOPT_LN_PRAXIS"
 #algname = "NLOPT_LN_NELDERMEAD"
 #algname = "NLOPT_LN_SBPLX"
-maxsteps = 1000 #number of steps/iterations for algorithm
+maxsteps = 500 #number of steps/iterations for algorithm
 maxtime = 10 * 60 * 60 #maximum time in seconds (h*m*s)
-ftol_rel = 1e-8
+ftol_rel = 1e-10
+logfit = 1 #if 1 we fit parameters in log space, if 0 in linear space
 
 # settings for ODE solver
-solvertype = "lsoda"
-#solvertype = "vode"
+#solvertype = "lsoda"
+solvertype = "vode"
 tols = 1e-9
 tfinal = 7 #time of last data point
 dt = 0.02 # time step for which we want results returned
@@ -398,19 +401,22 @@ eval_one_sample <- function(i, print_level) {
   # replace starting values for fitted parameters with those from old best fit
   par_ini_full[replace_idx] <- par_ini_old[replace_idx]
   
-  #browser()
-
-  # manually adjust starting values for fitted parameters for testing purposes
-  #par_ini_full["Fmax"] = 2
 
   
   par_ini <- as.numeric(par_ini_full)
 
+  # if we fit in log space, we transform
+  # will be back-tronsformed inside fitting function before use in ODE model
+  if (logfit==1) {
+    par_ini <- log(par_ini)
+    lb <- log(lb)
+    ub <- log(ub)
+  }
 
   # ---- fit ----
   bestfit <- nloptr::nloptr(
     x0 = par_ini,
-    eval_f = fit_model_function,
+    eval_f = fit_model1_function,
     lb = lb,
     ub = ub,
     opts = list(
@@ -429,7 +435,8 @@ eval_one_sample <- function(i, print_level) {
     scenarios = scenarios,
     solvertype = solvertype,
     tols = tols,
-    simulator = simulator
+    simulatorname = simulatorname,
+    logfit = logfit
   )
   # finished with fitting
   # doing some after fitting stuff
@@ -437,6 +444,12 @@ eval_one_sample <- function(i, print_level) {
   # extract params
   params <- bestfit$solution
   names(params) <- fitparnames
+
+# if we fit in log space, we transform back to get original values
+  if (logfit==1) {
+    params <- exp(params)
+  }
+
 
   # pack extras
   parstring <- paste0("c(", paste(as.numeric(params), collapse = ", "), ")")
@@ -505,6 +518,7 @@ old_objectives <- if (exists("oldbestfit")) {
 } else {
   rep(NA_real_, length(bestfit_all))
 }
+
 new_objectives <- vapply(bestfit_all, function(x) x$objective, numeric(1))
 objective_summary <- data.frame(
   old_objective = old_objectives,
@@ -525,10 +539,13 @@ if (file.exists(here::here('results', 'output', bestfitfile))) {
     to = here::here('results', 'output', paste0('old',bestfitfile)),
     overwrite = TRUE
   )
-}
-
-# save new best fit
-if (objective_summary$improvement[1] > 0) {
+  # save new best fit if it's better
+  if (objective_summary$improvement[1] > 0) {
+    saveRDS(bestfit_all, here::here('results', 'output', bestfitfile))
+  }
+} else {
+  # no prior best fit, just save
   saveRDS(bestfit_all, here::here('results', 'output', bestfitfile))
 }
+
 

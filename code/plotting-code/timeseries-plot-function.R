@@ -17,7 +17,11 @@ plot_timeseries <- function(
   dose_levels_labels = NULL,
   x_jitter = 0,
   # Optional RNG seed so jitter is reproducible; set to a number (e.g., 123) or leave NULL.
-  x_jitter_seed = 1234
+  x_jitter_seed = 1234,
+  # Optional column name for grouping multiple trajectories per dose (e.g., "Candidate").
+  group_var = NULL,
+  # Optional line transparency for dense overlays.
+  alpha_lines = 1
 ) {
   ## -------------------------------------------------------------------------
   ## Aesthetics and labels
@@ -103,6 +107,15 @@ plot_timeseries <- function(
   ## Ensure Dose is a factor with the desired labels
   ## -------------------------------------------------------------------------
   modelfit <- recode_dose(modelfit)
+
+  # If requested, add a grouping column so multiple trajectories can be drawn
+  # per dose without connecting lines across candidates.
+  if (!is.null(group_var) && group_var %in% names(modelfit)) {
+    modelfit <- modelfit %>%
+      mutate(.group_id = interaction(Dose, .data[[group_var]], drop = TRUE))
+  } else {
+    modelfit$.group_id <- modelfit$Dose
+  }
 
   if (!is.null(data) && nrow(data) > 0) {
     data <- recode_dose(data)
@@ -228,8 +241,15 @@ plot_timeseries <- function(
     p <- ggplot() +
       geom_line(
         data = df_line,
-        aes(x = !!sym(xvar), y = !!sym(yvar), colour = Dose, linetype = Dose),
+        aes(
+          x = !!sym(xvar),
+          y = !!sym(yvar),
+          colour = Dose,
+          linetype = Dose,
+          group = .group_id
+        ),
         linewidth = 1.2,
+        alpha = alpha_lines,
         lineend = "round",
         show.legend = keep_legend # <- only this panel feeds the legend
       ) +
