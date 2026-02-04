@@ -300,9 +300,9 @@ simulatorname = "model1_simulator"
 
 
 # settings for optimizer
-#algname = "NLOPT_LN_COBYLA"
+algname = "NLOPT_LN_COBYLA"
 #algname = "NLOPT_LN_BOBYQA"
-algname = "NLOPT_LN_NEWUOA"
+#algname = "NLOPT_LN_NEWUOA"
 #algname = "NLOPT_LN_PRAXIS"
 #algname = "NLOPT_LN_NELDERMEAD"
 #algname = "NLOPT_LN_SBPLX"

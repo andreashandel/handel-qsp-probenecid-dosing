@@ -229,16 +229,18 @@ To estimate the remaining parameters, the model predictions for log viral load, 
 This resulted in the following objective function being minimized by the fitting routine:
 
 $$
-O = \sum_{k} \frac{1}{N_{k}}  \textrm{NLL}_k  
+O = \sum_{j,k} \frac{1}{N_{j,k}}  \textrm{NLL}_{j,k}  
 $$
 
-where $N_{k}$ is the number of data points for variable $k$, and $\textrm{NLL}_k$ is the (non-normalized) negative log-likelihood term for each variable, given by
+The indices $j$ and $k$ stand for the 3 different variables (virus load, innate response, symptoms) and the 3 treatment conditions (untreated, 10 mg, 100 mg), respectively.
+
+$N_{j,k}$ is the number of data points for each variable and treatment condition, and $\textrm{NLL}_{j,k}$ is the negative log-likelihood term for each variable, given by
 
 $$
-\textrm{NLL}_k =  \sum_{i,j} \left( \log(\sigma_k^2) + \left( \frac{  D_{i,j,k} - M_{i,j,k} }{ \sigma_k }\right)^2 \right)
+\textrm{NLL}_{j,k} = 0.5 \sum_{i} \left( \log(\sigma_j^2) + \left( \frac{  D_{i,j,k} - M_{i,j,k} }{ \sigma_j }\right)^2 \right)
 $$
 
-The terms $\sigma_k^2$ are the variances for each variable, $D_{i,j,k}$ is the data, i.e. the measured value $i$ in treatment condition $j$ for variable $k$, and $M_{i,j,k}$ are the model predictions. 
+The terms $\sigma_j^2$ are the variances for each variable, which are assumed to be the same across treatment conditions. $D_{i,j,k}$ is the data, i.e. the measured value $i$ of variable $j$ in treatment condition $k$, and $M_{i,j,k}$ are the model predictions. 
 
 To explore uncertainty in the estimates for the fixed parameters, latin hypercube sampling was used to generate 100 samples for all fixed parameters sampled uniformly with lower and upper ranges half and twice the baseline value. The only parameter that was not sampled based on strong prior evidence was $E_{max,V}$. For each sample of the fixed parameters, the model was refit and then used to produce the dose-response predictions shown in the results. 
 

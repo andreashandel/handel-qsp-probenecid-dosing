@@ -58,6 +58,10 @@ source(here::here("code", "plotting-code", "stage1-trajectory-plot-function.R"))
 # Pick which model to fit. Valid values are "model1" or "model2".
 model_choice <- "model1"
 
+# Optionally save the best fit (single) in the same format as run-model1-fitting.R
+# so downstream scripts can use it without changes.
+save_bestfit_single <- TRUE
+
 # Number of random starts for the global exploration stage.
 # Increase this for a more thorough search (but longer runtime).
 # Typical values: 20-100 depending on compute budget.
@@ -135,7 +139,7 @@ stage2_algorithms <- c("NLOPT_LN_BOBYQA")
 n_workers <- NULL
 
 # Maximum number of optimizer iterations for each Stage 2 run.
-stage2_maxeval <- 2000
+stage2_maxeval <- 200
 
 # Fit in log-space for positive parameters? This improves optimizer stability.
 # This does NOT change the model; it only changes how we search the space.
@@ -412,6 +416,27 @@ ub <- config$ub
 simulatorname <- config$simulatorname
 fit_function <- config$fit_function
 
+# Parameter labels for table output (same as single-fit scripts).
+parlabels_full <- c(
+  b = "Virus infection rate",
+  k = "Adaptive response clearance rate",
+  p = "Virus production rate",
+  kF = "Innate response supression strength",
+  cV = "Virus removal rate",
+  gF = "Maximum innate response induction",
+  hV = "Adaptive response half-maximum induction",
+  Fmax = "Maximum innate response",
+  hF = "Adaptive response half-maximum induction",
+  gS = "Symptom induction rate",
+  cS = "Symptom decay rate",
+  Emax_F = "Maximum drug effect on innate response",
+  C50_F = "Half maximum of innate response effect",
+  C50_V = "Half maximum of virus suppression effect",
+  sigma_add_LogVirusLoad = "Sigma of LogVirusLoad",
+  sigma_add_IL6 = "Simga of IL6",
+  sigma_add_WeightLossPerc = "Sigma of WeightLossPerc"
+)
+
 # -----------------------------------------------------------------------------
 # Load fixed parameters (model-specific)
 # -----------------------------------------------------------------------------
@@ -461,6 +486,15 @@ if (length(user_fixed_params)) {
 }
 
 fitparnames <- names(par_ini_full)
+
+# Keep labels only for parameters still being fitted
+parlabels <- parlabels_full[fitparnames]
+if (any(is.na(parlabels))) {
+  stop("Parlabel definitions missing entries for some fitted parameters.")
+}
+if (length(parlabels) != length(par_ini_full)) {
+  stop("length of parlabels does not match length of par_ini_full")
+}
 
 # Add user-fixed parameters to the fixed parameter vector
 if (length(user_fixed_params)) {
@@ -921,6 +955,8 @@ local_optimize_one <- function(x0, algorithm) {
   result$fixedpars <- fixedpars
   result$Y0 <- Y0
   result$fitdata <- fitdata
+  result$parstring <- paste0("c(", paste(as.numeric(sol), collapse = ", "), ")")
+  result$parlabels <- parlabels
   result$simulator <- model_choice
   result$algorithm <- algorithm
 
@@ -1004,6 +1040,16 @@ output_file <- here::here(
 
 saveRDS(bestfits, output_file)
 message("Saved all refined fits to: ", output_file)
+
+if (save_bestfit_single) {
+  bestfit_single_file <- here::here(
+    "results",
+    "output",
+    paste0(model_choice, "-bestfit-single.Rds")
+  )
+  saveRDS(list(bestfit), bestfit_single_file)
+  message("Saved best fit single to: ", bestfit_single_file)
+}
 
 # -----------------------------------------------------------------------------
 # Cleanup: reset future plan to sequential

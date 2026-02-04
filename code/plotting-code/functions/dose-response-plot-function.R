@@ -1,0 +1,211 @@
+##############################
+# function to plot dose-response figures from a list of data frames
+##############################
+# PURPOSE
+#   Build dose-response figures from simulation outputs. This helper produces
+#   three panels (virus, innate response, symptoms) and supports uncertainty
+#   ribbons across parameter samples.
+#
+# packages needed by this function are
+# ggplot2, dplyr, patchwork, tidyr
+library(ggplot2)   # Plotting.
+library(dplyr)     # Data manipulation.
+library(patchwork) # Plot layout.
+library(tidyr)     # Reshaping to long format.
+
+plot_outcomes <- function(
+  df_list,
+  scenarios,
+  x_limits = NULL,
+  x_breaks = c(1e-3, 1e-1, 1e1, 1e3),
+  sample_display = c("band", "lines")
+) {
+  sample_display <- match.arg(sample_display)
+
+  # Validate log-scale x-axis limits.
+  if (!is.null(x_limits)) {
+    if (!is.numeric(x_limits) || length(x_limits) != 2L) {
+      stop("`x_limits` must be a numeric vector of length 2.")
+    }
+    if (any(!is.finite(x_limits)) || any(x_limits <= 0)) {
+      stop("`x_limits` values must be positive and finite for the log-scale axis.")
+    }
+    if (x_limits[1] >= x_limits[2]) {
+      stop("`x_limits` must be in increasing order (min, max).")
+    }
+  }
+
+  # Validate x-axis breaks for log-scale.
+  if (!is.null(x_breaks)) {
+    if (any(!is.finite(x_breaks)) || any(x_breaks <= 0)) {
+      stop("`x_breaks` values must be positive and finite for the log-scale axis.")
+    }
+  }
+  ## --- Colour-blind-safe palette (blue, bluish-green, vermillion) ----------
+  base_pal <- c("#0072B2", "#009E73", "#D55E00")
+
+  # Keep only the 'reduction_df' from each element.
+  df_list <- lapply(df_list, `[[`, "reduction_df")
+
+  ## Combine list -> single long data frame
+  df_all <- bind_rows(df_list, .id = "rep") %>% # 'rep' not used, but keeps provenance
+    filter(Scenario %in% scenarios) %>%
+    mutate(Scenario = factor(Scenario, levels = scenarios))
+
+  ## Long format for generic summarization across outcome variables
+  long <- df_all %>%
+    pivot_longer(
+      cols = c(perc_AUCV, perc_AUCF, perc_AUCS),
+      names_to = "metric",
+      values_to = "value"
+    )
+
+  ## Summary stats across replicates in df_list
+  ## 95% bounds as 2.5% and 97.5% quantiles
+  summ <- long %>%
+    group_by(Scenario, Dose, metric) %>%
+    summarise(
+      mean = mean(value, na.rm = TRUE),
+      lower = quantile(value, 0.025, na.rm = TRUE, type = 8),
+      upper = quantile(value, 0.975, na.rm = TRUE, type = 8),
+      .groups = "drop"
+    )
+
+  ## Baseline from the first list entry, reshaped to match `summ`.
+  baseline_long <- df_list[[1]] %>%
+    dplyr::ungroup() %>%
+    filter(Scenario %in% scenarios) %>%
+    mutate(Scenario = factor(Scenario, levels = scenarios)) %>%
+    pivot_longer(
+      cols = c(perc_AUCV, perc_AUCF, perc_AUCS),
+      names_to = "metric",
+      values_to = "baseline"
+    ) %>%
+    select(Scenario, Dose, metric, baseline)
+
+  summ <- summ %>%
+    left_join(baseline_long, by = c("Scenario", "Dose", "metric"))
+
+  ## Named vectors -> each Scenario gets its own hue/linetype
+  col_vals <- setNames(base_pal[seq_along(scenarios)], scenarios)
+  linetype_vals <- setNames(
+    rep(c("solid", "dashed", "dotted"), length.out = length(scenarios)),
+    scenarios
+  )
+
+  axis_title_size <- 14
+  axis_text_size <- 12
+
+  # Base theme shared across all panels.
+  base_theme <- theme_minimal() +
+    theme(
+      plot.title = element_blank(),
+      legend.title = element_text(size = 14),
+      legend.text = element_text(size = 12),
+      legend.key.width = unit(2, "cm"),
+      axis.title = element_text(size = axis_title_size),
+      axis.text = element_text(size = axis_text_size),
+      plot.margin = margin(t = 5, r = 15, b = 5, l = 5)
+    )
+
+  # Helper to build each panel from summarised data.
+  # sample_display controls whether uncertainty is shown as a band ("band")
+  # or as thin per-sample lines ("lines"). The baseline is always thick.
+  make_plot <- function(metric_name, ylab, keep_legend = FALSE) {
+    dfm <- filter(summ, metric == metric_name)
+
+    p <- ggplot(
+      dfm,
+      aes(x = Dose, y = baseline, colour = Scenario, linetype = Scenario)
+    )
+
+    if (sample_display == "band") {
+      p <- p +
+        geom_ribbon(
+          aes(ymin = lower, ymax = upper, fill = Scenario),
+          alpha = 0.2,
+          colour = NA,
+          show.legend = FALSE
+        )
+    } else {
+      sample_lines <- long %>%
+        filter(metric == metric_name) %>%
+        mutate(Scenario = factor(Scenario, levels = scenarios))
+
+      p <- p +
+        geom_line(
+          data = sample_lines,
+          aes(y = value, group = interaction(rep, Scenario)),
+          linewidth = 0.3,
+          alpha = 0.5,
+          show.legend = FALSE
+        )
+    }
+
+    p <- p +
+      geom_line(linewidth = 1.2) +
+      # use below if I also want to plot the mean in addition to the baseline
+      # geom_line(
+      #   aes(y = mean),
+      #   linewidth = 0.9,
+      #   linetype = "dotdash",
+      #   show.legend = FALSE,
+      #   na.rm = TRUE
+      # ) +
+      scale_color_manual(values = col_vals) +
+      scale_fill_manual(values = col_vals) +
+      scale_linetype_manual(values = linetype_vals) +
+      scale_y_continuous(limits = c(0, 100)) +
+      scale_x_log10(limits = x_limits, breaks = x_breaks) +
+      labs(
+        x = NULL,
+        y = ylab,
+        colour = "Scenario:",
+        linetype = "Scenario:"
+      ) +
+      base_theme +
+      geom_vline(
+        xintercept = c(10, 100),
+        linetype = "dashed",
+        colour = "black"
+      )
+
+    # Only one panel keeps its legend; the others hide it.
+    if (!keep_legend) {
+      p <- p + theme(legend.position = "none")
+    }
+    p
+  }
+
+  ## Only the first panel keeps its legend; patchwork will collect it.
+  p1 <- make_plot(
+    "perc_AUCV",
+    "Log Viral Load Reduction (%)",
+    keep_legend = TRUE
+  )
+  p2 <- make_plot("perc_AUCF", "Innate Response Reduction (%)")
+  p3 <- make_plot("perc_AUCS", "Morbidity Reduction (%)")
+
+  ## --- Combine, collect guides, place legend on top & add global x-label ---
+  combined <- (p1 | p2 | p3) +
+    plot_layout(guides = "collect") &
+    theme(
+      legend.position = "top",
+      legend.direction = "horizontal",
+      legend.justification = "center"
+    )
+
+  combined +
+    plot_annotation(
+      caption = "Dose",
+      theme = theme(
+        plot.caption = element_text(
+          hjust = 0.5,
+          vjust = -0.5,
+          face = "bold",
+          size = 14
+        ),
+        plot.margin = margin(b = 20)
+      )
+    )
+}

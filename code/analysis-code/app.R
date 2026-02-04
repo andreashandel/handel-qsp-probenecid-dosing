@@ -1,46 +1,55 @@
-# Shiny application for interactively exploring the QSP model fits
+# -----------------------------------------------------------------------------
+# app.R
+# -----------------------------------------------------------------------------
+# PURPOSE
+#   Shiny application for interactively exploring the QSP model fits.
+#   Users can adjust parameters, view simulated time-series, and track the
+#   objective function value in real time.
 #
-# The app exposes the model parameters as numeric inputs so that users can
-# explore how different parameter combinations affect the simulated time-series
-# and the corresponding objective function value. The layout mirrors the static
-# "best fit" figure by re-using the existing plotting helper.
+# HIGH-LEVEL FLOW (READ ME FIRST)
+#   1) Load data, fixed parameters, and sigma defaults used by the fitter.
+#   2) Build model configs (model1/model2) with defaults + bestfit overrides.
+#   3) Construct the UI (parameter inputs + plot output).
+#   4) On every input change, simulate the model and compute the objective.
+#   5) Render the time-series plot and objective value for the user.
+# -----------------------------------------------------------------------------
+#
+# DETAILED WALKTHROUGH
+#   - Data setup: uses load_fit_data() for consistent factor levels and doses.
+#   - Parameter defaults: pulls baseline values from model-config and fixed CSVs.
+#   - Bestfit overrides: uses previously saved bestfit RDS if present.
+#   - UI: two tabs for fitted vs fixed parameters, plus a plot panel.
+#   - Server: reads inputs, simulates trajectories, and computes the objective.
 
-# run with shiny::runApp("code/analysis-code/app.R")
+library(shiny)     # Web app framework.
+library(here)      # Project-root-relative file paths.
+library(dplyr)     # Data manipulation utilities.
+library(tidyr)     # Pivoting for objective contribution table.
+library(ggplot2)   # Base plotting for time-series output.
+library(patchwork) # Plot layout helper used in timeseries plotting.
 
-library(shiny)
-library(here)
-library(dplyr)
+# Model simulators + fit function
+source(here::here("code", "analysis-code", "functions", "model1-simulator-function.R"))
+source(here::here("code", "analysis-code", "functions", "model2-simulator-function.R"))
+source(here::here("code", "analysis-code", "functions", "fit-function.R"))
 
-# The plotting helper depends on ggplot2 and patchwork; loading them explicitly
-# here ensures the app can render the figures even if the helper has not been
-# sourced before.
-library(ggplot2)
-library(patchwork)
+# Shared helpers
+source(here::here("code", "analysis-code", "functions", "fit-data-function.R"))
+source(here::here("code", "analysis-code", "functions", "fixed-parameters-function.R"))
+source(here::here("code", "analysis-code", "functions", "sigma-settings-function.R"))
+source(here::here("code", "analysis-code", "functions", "model-config-function.R"))
+source(here::here("code", "analysis-code", "functions", "objective-components-function.R"))
 
-# Source the core model functions ------------------------------------------------
-source(here::here("code", "analysis-code", "model1-simulator-function.R"))
-source(here::here("code", "analysis-code", "model2-simulator-function.R"))
+# Plotting helper (for time-series layout)
+source(here::here("code", "plotting-code", "functions", "timeseries-plot-function.R"))
 
-source(here::here("code", "analysis-code", "model1-fit-function.R"))
-source(here::here("code", "plotting-code", "timeseries-plot-function.R"))
-
-# Load and prepare the fitting data --------------------------------------------
-fitdata_path <- here::here("data", "processed-data", "processeddata.csv")
-fitdata <- read.csv(fitdata_path, stringsAsFactors = FALSE)
-
-scenario_levels <- c("NoTreatment", "PanCytoVir10mg", "PanCytoVir100mg")
-quantity_levels <- c("LogVirusLoad", "IL6", "WeightLossPerc")
-
-fitdata <- fitdata |>
-  mutate(
-    Scenario = factor(Scenario, levels = scenario_levels),
-    Quantity = factor(Quantity, levels = quantity_levels),
-    Dose = c(0, 10, 100)[as.numeric(Scenario)],
-    xvals = Day
-  )
-
-doses <- sort(unique(fitdata$Dose))
-scenarios <- levels(fitdata$Scenario)
+# -----------------------------------------------------------------------------
+# Load and prepare data
+# -----------------------------------------------------------------------------
+fitdata_bundle <- load_fit_data()
+fitdata <- fitdata_bundle$fitdata
+scenarios <- fitdata_bundle$scenarios
+doses <- fitdata_bundle$doses
 
 format_dose_label <- function(dose) {
   if (isTRUE(all.equal(dose, 0))) {
@@ -51,26 +60,9 @@ format_dose_label <- function(dose) {
 
 dose_labels <- vapply(doses, format_dose_label, character(1))
 
-load_fixed_parameters <- function(file_path) {
-  fixedpars_df <- read.csv(file_path, stringsAsFactors = FALSE)
-  fixedpars_df$parname <- trimws(fixedpars_df$parname)
-  fixedpars_df$parnamefull <- trimws(fixedpars_df$parnamefull)
-
-  fixedpars_base <- fixedpars_df$value
-  names(fixedpars_base) <- fixedpars_df$parname
-  fixedpars_base <- as.numeric(fixedpars_base)
-  names(fixedpars_base) <- fixedpars_df$parname
-
-  fixed_param_labels <- fixedpars_df$parnamefull
-  names(fixed_param_labels) <- fixedpars_df$parname
-
-  list(
-    df = fixedpars_df,
-    base = fixedpars_base,
-    labels = fixed_param_labels
-  )
-}
-
+# -----------------------------------------------------------------------------
+# Fixed parameters + sigma settings (shared across models)
+# -----------------------------------------------------------------------------
 fixedpars_model1 <- load_fixed_parameters(
   here::here("data", "processed-data", "model1-fixed-parameters.csv")
 )
@@ -78,110 +70,24 @@ fixedpars_model2 <- load_fixed_parameters(
   here::here("data", "processed-data", "model2-fixed-parameters.csv")
 )
 
-# Initial conditions for the ODE system ----------------------------------------
-Y0_model1 <- c(
-  Ad = 0,
-  Ac = 0,
-  At = 0,
-  U = 1e7,
-  I = 0,
-  V = 1,
-  F = 0,
-  A = 0,
-  S = 0
+sigma_settings <- compute_sigma_settings(
+  fitdata,
+  sigma_to_fit = c(
+    "sigma_add_LogVirusLoad",
+    "sigma_add_IL6",
+    "sigma_add_WeightLossPerc"
+  )
 )
 
-Y0_model2 <- c(
-  Ad = 0,
-  Ac = 0,
-  At = 0,
-  U = 1e7,
-  E = 0,
-  I = 0,
-  V = 1,
-  F = 0,
-  A = 0,
-  S = 0
+sigma_fixed_labels <- c(
+  sigma_prop_LogVirusLoad = "Sigma (proportional) – Log Virus Load",
+  sigma_prop_IL6 = "Sigma (proportional) – IL-6",
+  sigma_prop_WeightLossPerc = "Sigma (proportional) – Weight loss"
 )
 
-# Baseline fitted parameters and bounds ----------------------------------------
-fit_param_defaults <- c(
-  b = 1e-8,
-  k = 1e-4,
-  p = 2760,
-  kF = 1,
-  cV = 10,
-  gF = 0.1,
-  hV = 1e4,
-  Fmax = 5,
-  hF = 1,
-  gS = 10,
-  cS = 1,
-  Emax_F = 1,
-  C50_F = 1e-10,
-  C50_V = 1e-10
-)
-
-fit_param_bounds <- data.frame(
-  name = names(fit_param_defaults),
-  min = c(1e-12, 1e-8, 1e-3, 1e-10, 1e-2, 1e-3, 1e-5, 0.1, 1e-3, 1e-4, 1e-2, 1e-3, 1e-7, 1e-7),
-  max = c(1e-2, 1e5, 1e10, 1e3, 1e5, 1e3, 1e8, 10, 1e5, 1e4, 1e4, 1, 1e6, 1e6),
-  stringsAsFactors = FALSE
-)
-
-# Measurement noise parameters --------------------------------------------------
-var_by_qty <- fitdata |>
-  group_by(Quantity) |>
-  summarize(var_value = var(Value, na.rm = TRUE), .groups = "drop")
-
-sigma_all <- c(
-  sigma_add_LogVirusLoad = sqrt(var_by_qty$var_value[var_by_qty$Quantity == "LogVirusLoad"]),
-  sigma_prop_LogVirusLoad = 0,
-  sigma_add_IL6 = sqrt(var_by_qty$var_value[var_by_qty$Quantity == "IL6"]),
-  sigma_prop_IL6 = 0,
-  sigma_add_WeightLossPerc = sqrt(var_by_qty$var_value[var_by_qty$Quantity == "WeightLossPerc"]),
-  sigma_prop_WeightLossPerc = 0
-)
-
-sigma_to_fit <- c(
-  "sigma_add_LogVirusLoad",
-  "sigma_add_IL6",
-  "sigma_add_WeightLossPerc"
-)
-
-fit_param_defaults <- c(fit_param_defaults, sigma_all[sigma_to_fit])
-
-sigma_bounds <- data.frame(
-  name = names(sigma_all),
-  min = 0,
-  max = 1e3,
-  stringsAsFactors = FALSE
-)
-
-fit_param_bounds <- bind_rows(
-  fit_param_bounds,
-  sigma_bounds[sigma_bounds$name %in% sigma_to_fit, ]
-)
-fit_param_bounds <- fit_param_bounds[!duplicated(fit_param_bounds$name), ]
-fit_param_bounds$min <- 0
-
-# Fixed parameters (including the non-fitted sigmas) ----------------------------
-fixedpars_defaults_model1 <- c(
-  fixedpars_model1$base,
-  sigma_all[setdiff(names(sigma_all), sigma_to_fit)]
-)
-fixedpars_defaults_model2 <- c(
-  fixedpars_model2$base,
-  sigma_all[setdiff(names(sigma_all), sigma_to_fit)]
-)
-
-# Attempt to load best-fit values as the starting point ------------------------
-fit_param_defaults <- fit_param_defaults[!duplicated(names(fit_param_defaults))]
-
-fit_param_defaults_base <- fit_param_defaults
-fixedpars_defaults_model1 <- fixedpars_defaults_model1[!duplicated(names(fixedpars_defaults_model1))]
-fixedpars_defaults_model2 <- fixedpars_defaults_model2[!duplicated(names(fixedpars_defaults_model2))]
-
+# -----------------------------------------------------------------------------
+# Base model configs (shared defaults, updated with bestfit if available)
+# -----------------------------------------------------------------------------
 load_bestfit_defaults <- function(bestfit_path, fit_defaults, fixed_defaults, Y0_defaults) {
   bestfit_obj <- tryCatch(readRDS(bestfit_path), error = function(e) NULL)
 
@@ -216,59 +122,41 @@ load_bestfit_defaults <- function(bestfit_path, fit_defaults, fixed_defaults, Y0
   )
 }
 
-build_model_config <- function(id,
-                               label,
-                               simulatorname,
-                               bestfit_path,
-                               fixedpars_bundle,
-                               fixed_defaults,
-                               Y0_defaults) {
-  fit_defaults <- fit_param_defaults_base
+build_app_model_config <- function(model_choice, fixedpars_bundle, bestfit_path) {
+  config <- build_model_config(model_choice)
 
-  defaults <- load_bestfit_defaults(bestfit_path, fit_defaults, fixed_defaults, Y0_defaults)
+  fit_defaults <- c(config$par_ini_full, sigma_settings$sigma_fit_ini)
+  fixed_defaults <- c(fixedpars_bundle$values, sigma_settings$sigma_fixed)
+
+  defaults <- load_bestfit_defaults(bestfit_path, fit_defaults, fixed_defaults, config$Y0)
 
   list(
-    id = id,
-    label = label,
-    simulatorname = simulatorname,
+    id = model_choice,
+    label = ifelse(model_choice == "model1", "Model 1", "Model 2"),
+    simulatorname = config$simulatorname,
     fit_defaults = defaults$fit,
     fixed_defaults = defaults$fixed,
     Y0 = defaults$Y0,
     bestfit_path = bestfit_path,
     fit_param_names = names(defaults$fit),
-    fixed_param_names = names(fixedpars_bundle$base),
+    fixed_param_names = names(fixedpars_bundle$values),
     fixed_param_labels = fixedpars_bundle$labels
   )
 }
 
 model_configs <- list(
-  v1 = build_model_config(
-    id = "v1",
-    label = "Model 1",
-    simulatorname = model1_simulator,
-    bestfit_path = here::here("results", "output", "model1-bestfit-single.Rds"),
+  model1 = build_app_model_config(
+    model_choice = "model1",
     fixedpars_bundle = fixedpars_model1,
-    fixed_defaults = fixedpars_defaults_model1,
-    Y0_defaults = Y0_model1
+    bestfit_path = here::here("results", "output", "model1-bestfit-sample.Rds")
   ),
-  v2 = build_model_config(
-    id = "v2",
-    label = "Model 2",
-    simulatorname = model2_simulator,
-    bestfit_path = here::here("results", "output", "model2-bestfit-single.Rds"),
+  model2 = build_app_model_config(
+    model_choice = "model2",
     fixedpars_bundle = fixedpars_model2,
-    fixed_defaults = fixedpars_defaults_model2,
-    Y0_defaults = Y0_model2
+    bestfit_path = here::here("results", "output", "model2-bestfit-sample.Rds")
   )
 )
 
-default_model_id <- names(model_configs)[1]
-model_choices <- setNames(
-  names(model_configs),
-  vapply(model_configs, function(cfg) cfg$label, character(1))
-)
-
-# Helper metadata for UI construction -----------------------------------------
 fit_param_labels <- c(
   b = "Virus infection rate",
   k = "Adaptive response clearance rate",
@@ -289,18 +177,9 @@ fit_param_labels <- c(
   sigma_add_WeightLossPerc = "Sigma (additive) – Weight loss"
 )
 
-sigma_fixed_labels <- c(
-  sigma_prop_LogVirusLoad = "Sigma (proportional) – Log Virus Load",
-  sigma_prop_IL6 = "Sigma (proportional) – IL-6",
-  sigma_prop_WeightLossPerc = "Sigma (proportional) – Weight loss"
-)
-
-# Re-usable helper to evaluate the model --------------------------------------
-solvertype <- "vode"
-tols <- 1e-9
-tfinal <- 7
-dt <- 0.002
-
+# -----------------------------------------------------------------------------
+# UI helpers
+# -----------------------------------------------------------------------------
 param_input_id <- function(name) paste0("par_", name)
 fixed_input_id <- function(name) paste0("fixed_", name)
 
@@ -317,15 +196,13 @@ format_input_label <- function(name, label_map) {
   paste(name, label_text, sep = " - ")
 }
 
-format_condition <- function(cond) {
-  if (inherits(cond, "condition")) {
-    conditionMessage(cond)
-  } else if (is.null(cond)) {
-    ""
-  } else {
-    as.character(cond)
-  }
-}
+# -----------------------------------------------------------------------------
+# Simulation helper
+# -----------------------------------------------------------------------------
+solvertype <- "vode"
+tols <- 1e-9
+tfinal <- 7
+dt <- 0.002
 
 run_model_once <- function(params, fixedpars, Y0_vals, simulatorname) {
   params <- params[!is.na(params)]
@@ -343,7 +220,8 @@ run_model_once <- function(params, fixedpars, Y0_vals, simulatorname) {
         Ad0 = ad0,
         txstart = 1,
         txinterval = 0.5,
-        txend = 4,
+        # Match fitting/simulation schedule: last dose just before day 4
+        txend = 3.9,
         tstart = 0,
         tfinal = tfinal,
         dt = dt,
@@ -353,7 +231,6 @@ run_model_once <- function(params, fixedpars, Y0_vals, simulatorname) {
     )
 
     odeout <- tryCatch(do.call(simulatorname, allpars), error = identity)
-
     if (inherits(odeout, "error")) {
       return(odeout)
     }
@@ -363,22 +240,19 @@ run_model_once <- function(params, fixedpars, Y0_vals, simulatorname) {
     Ct <- ode_df$At / as.numeric(allpars["Vt"])
     fu <- as.numeric(allpars["fmax"]) * Ct / (as.numeric(allpars["f50"]) + Ct)
     Cu <- fu * Ct
-    fV <- as.numeric(allpars["Emax_V"]) * Cu / (as.numeric(allpars["C50_V"]) + Cu) # effect of drug on virus
-    fF <- as.numeric(allpars["Emax_F"]) * Cu / (as.numeric(allpars["C50_F"]) + Cu) # effect of drug on innate
+    fV <- as.numeric(allpars["Emax_V"]) * Cu / (as.numeric(allpars["C50_V"]) + Cu)
+    fF <- as.numeric(allpars["Emax_F"]) * Cu / (as.numeric(allpars["C50_F"]) + Cu)
 
-    vprod <- (1 - fV) * as.numeric(allpars["p"]) * ode_df$I / (1 + as.numeric(allpars["kF"]) * ode_df$F) 
+    vprod <- (1 - fV) * as.numeric(allpars["p"]) * ode_df$I / (1 + as.numeric(allpars["kF"]) * ode_df$F)
 
-    ode_df$Cu <- Cu 
+    ode_df$Cu <- Cu
     ode_df$fV <- fV
     ode_df$fF <- vprod
 
-
-
     ode_df$Dose <- ad0
     ode_df$Scenario <- factor(scenario_label, levels = scenarios)
-    # add Cu, fV and fF
 
-    return(ode_df)
+    ode_df
   }
 
   sim_list <- lapply(seq_along(doses), function(i) {
@@ -393,30 +267,26 @@ run_model_once <- function(params, fixedpars, Y0_vals, simulatorname) {
 
   sim_df <- bind_rows(sim_list)
 
-  objective <- tryCatch(
-    fit_model_function(
-      params = unname(params),
-      fitdata = fitdata,
-      Y0 = Y0_vals,
-      tfinal = tfinal,
-      dt = dt,
-      fitparnames = names(params),
-      fixedpars = fixedpars,
-      doses = doses,
-      scenarios = scenarios,
-      solvertype = solvertype,
-      tols = tols,
-      simulatorname = simulatorname
-    ),
-    error = identity
+  sigma_pool <- collect_sigma_pool(params, fixedpars)
+  pred_long <- build_prediction_long(sim_df, scenario_col = "Scenario", time_col = "time")
+  components <- compute_objective_components(fitdata, pred_long, sigma_pool)
+
+  objective <- components$objective
+  if (!is.finite(objective)) {
+    objective <- simpleError("Objective evaluation failed (non-finite result).")
+  }
+
+  breakdown <- list(
+    nll = components$breakdown_nll,
+    ssr = components$breakdown_ssr
   )
 
-  list(sim = sim_df, objective = objective)
+  list(sim = sim_df, objective = objective, breakdown = breakdown)
 }
 
-# ---------------------------------------------------------------------------- #
-# Shiny user interface ---------------------------------------------------------
-# ---------------------------------------------------------------------------- #
+# -----------------------------------------------------------------------------
+# UI
+# -----------------------------------------------------------------------------
 ui <- fluidPage(
   titlePanel("PanCytoVir model explorer"),
   tags$head(
@@ -432,8 +302,8 @@ ui <- fluidPage(
       selectInput(
         "model_choice",
         "Model version",
-        choices = model_choices,
-        selected = default_model_id
+        choices = c("Model 1" = "model1", "Model 2" = "model2"),
+        selected = "model1"
       ),
       helpText(
         "Adjust the parameters to immediately update the simulation ",
@@ -442,30 +312,33 @@ ui <- fluidPage(
       br(),
       tabsetPanel(
         id = "param-tabs",
-      tabPanel(
-        "Fitted parameters",
-        uiOutput("fit_param_inputs")
-      ),
-      tabPanel(
-        "Fixed parameters",
-        uiOutput("fixed_param_inputs"),
-        uiOutput("fixed_sigma_inputs")
+        tabPanel("Fitted parameters", uiOutput("fit_param_inputs")),
+        tabPanel(
+          "Fixed parameters",
+          uiOutput("fixed_param_inputs"),
+          uiOutput("fixed_sigma_inputs")
+        )
       )
-    )
-  ),
+    ),
     mainPanel(
       width = 8,
       h4("Objective function"),
       textOutput("objective_value"),
+      br(),
+      h4("Objective contributions (by variable and dose)"),
+      tableOutput("objective_breakdown"),
+      br(),
+      h4("SSR contributions (by variable and dose)"),
+      tableOutput("objective_ssr"),
       br(),
       plotOutput("fit_plot", height = "900px")
     )
   )
 )
 
-# ---------------------------------------------------------------------------- #
-# Server logic -----------------------------------------------------------------
-# ---------------------------------------------------------------------------- #
+# -----------------------------------------------------------------------------
+# Server
+# -----------------------------------------------------------------------------
 server <- function(input, output, session) {
   model_config <- reactive({
     req(input$model_choice)
@@ -478,15 +351,12 @@ server <- function(input, output, session) {
     div(
       class = "parameter-grid",
       lapply(cfg$fit_param_names, function(nm) {
-        bounds_row <- fit_param_bounds[fit_param_bounds$name == nm, ]
-        max_val <- if (nrow(bounds_row)) bounds_row$max else NA
         label <- format_input_label(nm, fit_param_labels)
         numericInput(
           inputId = param_input_id(nm),
           label = label,
           value = cfg$fit_defaults[[nm]],
           min = 0,
-          max = max_val,
           step = NA
         )
       })
@@ -513,20 +383,18 @@ server <- function(input, output, session) {
 
   output$fixed_sigma_inputs <- renderUI({
     cfg <- model_config()
-    sigma_fixed_names <- setdiff(names(sigma_all), sigma_to_fit)
+    sigma_fixed_names <- names(sigma_settings$sigma_fixed)
 
     div(
       class = "parameter-grid",
       tags$div(class = "control-header", "Measurement noise (fixed)"),
       lapply(sigma_fixed_names, function(nm) {
         label <- format_input_label(nm, sigma_fixed_labels)
-        sigma_max <- sigma_bounds$max[sigma_bounds$name == nm]
         numericInput(
           inputId = fixed_input_id(nm),
           label = label,
           value = cfg$fixed_defaults[[nm]],
           min = 0,
-          max = ifelse(length(sigma_max), sigma_max[1], NA),
           step = NA
         )
       })
@@ -548,7 +416,7 @@ server <- function(input, output, session) {
   fixed_values <- reactive({
     cfg <- model_config()
     defaults <- cfg$fixed_defaults
-    fixed_names <- c(cfg$fixed_param_names, setdiff(names(sigma_all), sigma_to_fit))
+    fixed_names <- c(cfg$fixed_param_names, names(sigma_settings$sigma_fixed))
 
     vapply(
       fixed_names,
@@ -570,25 +438,64 @@ server <- function(input, output, session) {
     res <- model_results()
 
     if (!is.null(res$error)) {
-      return(paste("Simulation failed:", format_condition(res$error)))
+      return(paste("Simulation failed:", conditionMessage(res$error)))
     }
 
     if (inherits(res$objective, "error")) {
-      return(paste("Objective evaluation failed:", format_condition(res$objective)))
+      return(paste("Objective evaluation failed:", conditionMessage(res$objective)))
     }
 
     paste0("Current objective value: ", format(res$objective, digits = 6, scientific = TRUE))
   })
 
+  output$objective_breakdown <- renderTable({
+    res <- model_results()
+    if (is.null(res$breakdown) || is.null(res$breakdown$nll)) {
+      return(NULL)
+    }
+
+    res$breakdown$nll %>%
+      mutate(
+        Quantity = recode(Quantity,
+                          LogVirusLoad = "V",
+                          IL6 = "F",
+                          WeightLossPerc = "S")
+      ) %>%
+      select(Quantity, Scenario, weighted_nll) %>%
+      tidyr::pivot_wider(
+        names_from = Scenario,
+        values_from = weighted_nll
+      )
+  }, digits = 4, rownames = TRUE)
+
+  output$objective_ssr <- renderTable({
+    res <- model_results()
+    if (is.null(res$breakdown) || is.null(res$breakdown$ssr)) {
+      return(NULL)
+    }
+
+    res$breakdown$ssr %>%
+      mutate(
+        Quantity = recode(Quantity,
+                          LogVirusLoad = "V",
+                          IL6 = "F",
+                          WeightLossPerc = "S")
+      ) %>%
+      select(Quantity, Scenario, weighted_ssr) %>%
+      tidyr::pivot_wider(
+        names_from = Scenario,
+        values_from = weighted_ssr
+      )
+  }, digits = 4, rownames = TRUE)
+
   output$fit_plot <- renderPlot({
     res <- model_results()
-    validate(need(is.null(res$error), format_condition(res$error)))
-    validate(need(!inherits(res$objective, "error"), format_condition(res$objective)))
+    validate(need(is.null(res$error), if (is.null(res$error)) "" else conditionMessage(res$error)))
+    validate(need(!inherits(res$objective, "error"),
+                  if (inherits(res$objective, "error")) conditionMessage(res$objective) else ""))
 
-    sim_df <- res$sim |>
-      mutate(
-        Dose = factor(Dose, levels = doses)
-      )
+    sim_df <- res$sim %>%
+      mutate(Dose = factor(Dose, levels = doses))
 
     plot_timeseries(
       data = fitdata,
