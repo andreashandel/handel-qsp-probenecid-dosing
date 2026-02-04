@@ -15,6 +15,9 @@
 
 library(here) # Project-root-relative file paths.
 
+# Centralized virus transform helpers.
+source(here::here("code", "analysis-code", "functions", "virus-transform-function.R"))
+
 #' Build a model configuration object for model1 or model2.
 #'
 #' @param model_choice "model1" or "model2".
@@ -95,10 +98,15 @@ build_model_config <- function(model_choice) {
     Emax_F = "Maximum drug effect on innate response",
     C50_F = "Half maximum of innate response effect",
     C50_V = "Half maximum of virus suppression effect",
-    sigma_add_LogVirusLoad = "Sigma of LogVirusLoad",
     sigma_add_IL6 = "Simga of IL6",
-    sigma_add_WeightLossPerc = "Sigma of WeightLossPerc"
+    sigma_add_WeightLossPerc = "Sigma of WeightLossPerc",
+    sigma_prop_IL6 = "Proportional sigma of IL6",
+    sigma_prop_WeightLossPerc = "Proportional sigma of WeightLossPerc"
   )
+
+  # Add virus-specific sigma labels using the central quantity name.
+  parlabels_full[paste0("sigma_add_", virus_quantity_name)] <- "Sigma of VirusLoad"
+  parlabels_full[paste0("sigma_prop_", virus_quantity_name)] <- "Proportional sigma of VirusLoad"
 
   if (model_choice == "model1") {
     # Initial conditions for model 1 (no E compartment).

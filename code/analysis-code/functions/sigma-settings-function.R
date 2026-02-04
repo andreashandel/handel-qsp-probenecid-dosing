@@ -11,6 +11,10 @@
 # -----------------------------------------------------------------------------
 
 library(dplyr) # Grouped variance summaries for each quantity.
+library(here)
+
+# Centralized virus transform helpers.
+source(here::here("code", "analysis-code", "functions", "virus-transform-function.R"))
 
 #' Compute sigma parameters and split into fitted vs fixed subsets.
 #'
@@ -30,15 +34,26 @@ compute_sigma_settings <- function(fitdata, sigma_to_fit = character(0)) {
   # Empirical variance per measurement type; used as sigma defaults.
   var_by_qty <- fitdata %>%
     group_by(Quantity) %>%
-    summarize(v = var(Value, na.rm = TRUE), .groups = "drop")
+    summarize(v = var(Value, na.rm = TRUE), .groups = "drop") %>%
+    mutate(v = ifelse(is.na(v) | v < 0, 0, v))
+
+  var_map <- setNames(var_by_qty$v, as.character(var_by_qty$Quantity))
+  expected_qty <- c(virus_quantity_name, "IL6", "WeightLossPerc")
+  missing_qty <- setdiff(expected_qty, names(var_map))
+  if (length(missing_qty)) {
+    stop(
+      "fitdata is missing required Quantity levels: ",
+      paste(missing_qty, collapse = ", ")
+    )
+  }
 
   # Build the full sigma vector (additive + proportional terms).
   sigma_all <- c(
-    sigma_add_LogVirusLoad = sqrt(as.numeric(var_by_qty[1, 2])),
-    sigma_prop_LogVirusLoad = 0.0,
-    sigma_add_IL6 = sqrt(as.numeric(var_by_qty[2, 2])),
+    setNames(sqrt(var_map[[virus_quantity_name]]), paste0("sigma_add_", virus_quantity_name)),
+    setNames(0.0, paste0("sigma_prop_", virus_quantity_name)),
+    sigma_add_IL6 = sqrt(var_map[["IL6"]]),
     sigma_prop_IL6 = 0.0,
-    sigma_add_WeightLossPerc = sqrt(as.numeric(var_by_qty[3, 2])),
+    sigma_add_WeightLossPerc = sqrt(var_map[["WeightLossPerc"]]),
     sigma_prop_WeightLossPerc = 0.0
   )
 

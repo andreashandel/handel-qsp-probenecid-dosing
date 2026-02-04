@@ -17,6 +17,11 @@
 #'   - var_labs: display labels for variables
 #'   - scen_labs: display labels for scenarios
 #'
+library(here)
+
+# Centralized virus transform helpers.
+source(here::here("code", "analysis-code", "functions", "virus-transform-function.R"))
+
 get_plotting_config <- function() {
   # Map numeric dose values to scenario labels used in the dataset.
   scenario_map <- c(
@@ -29,14 +34,14 @@ get_plotting_config <- function() {
   list(
     scenario_map = scenario_map,
     scenario_levels = c("NoTreatment", "PanCytoVir10mg", "PanCytoVir100mg"),
-    quantity_levels = c("LogVirusLoad", "IL6", "WeightLossPerc"),
+    quantity_levels = c(virus_quantity_name, "IL6", "WeightLossPerc"),
     var_colors = c(
-      LogVirusLoad = "#0072B2",
+      VirusLoad = "#0072B2",
       IL6 = "#D55E00",
       WeightLossPerc = "#009E73"
     ),
     var_labs = c(
-      LogVirusLoad = "Log Virus Load",
+      VirusLoad = "Virus Load",
       IL6 = "IL-6",
       WeightLossPerc = "Weight Loss (%)"
     ),

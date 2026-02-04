@@ -14,13 +14,17 @@
 library(dplyr) # Data manipulation verbs (mutate, factor handling, etc.).
 library(here)  # Project-root-relative file paths.
 
+# Centralized virus transform helpers.
+source(here::here("code", "analysis-code", "functions", "virus-transform-function.R"))
+
 #' Load and standardize the processed fitting data.
 #'
 #' This function reads the processed CSV and performs the minimal transformation
 #' steps that every analysis script expects:
-#'   1) Scenario and Quantity are converted to ordered factors.
-#'   2) Dose is mapped from Scenario (0/10/100 mg/kg).
-#'   3) xvals is created as a duplicate of Day (used by the fit functions).
+#'   1) Virus values are transformed using transform_virus().
+#'   2) Scenario and Quantity are converted to ordered factors.
+#'   3) Dose is mapped from Scenario (0/10/100 mg/kg).
+#'   4) xvals is created as a duplicate of Day (used by the fit functions).
 #'
 #' @param data_path Optional path to the processed data CSV. When NULL, uses the
 #'   project default at data/processed-data/processeddata.csv.
@@ -38,16 +42,46 @@ load_fit_data <- function(data_path = NULL) {
   # Read the CSV as a plain data.frame; we control factors explicitly below.
   fitdata <- read.csv(data_path, stringsAsFactors = FALSE)
 
+
   # Explicit factor level ordering guarantees consistent plotting and fitting.
   scenario_levels <- c("NoTreatment", "PanCytoVir10mg", "PanCytoVir100mg")
-  quantity_levels <- c("LogVirusLoad", "IL6", "WeightLossPerc")
+  quantity_levels <- c(virus_quantity_name, "IL6", "WeightLossPerc")
+
+  # Validate that all Scenario/Quantity values are expected.
+  raw_scenarios <- sort(unique(fitdata$Scenario))
+  raw_quantities <- sort(unique(fitdata$Quantity))
+  unknown_scenarios <- setdiff(raw_scenarios, scenario_levels)
+  unknown_quantities <- setdiff(raw_quantities, quantity_levels)
+  if (length(unknown_scenarios)) {
+    stop(
+      "Unknown Scenario values in fitdata: ",
+      paste(unknown_scenarios, collapse = ", ")
+    )
+  }
+  if (length(unknown_quantities)) {
+    stop(
+      "Unknown Quantity values in fitdata: ",
+      paste(unknown_quantities, collapse = ", ")
+    )
+  }
 
   # Standardize columns used by every downstream script.
   fitdata <- fitdata %>%
     mutate(
+      Value = ifelse(
+        Quantity == virus_quantity_name,
+        transform_virus(Value),
+        Value
+      )
+    ) %>%
+    mutate(
       Scenario = factor(Scenario, levels = scenario_levels), # Ordered factor.
       Quantity = factor(Quantity, levels = quantity_levels), # Ordered factor.
-      Dose = c(0, 10, 100)[as.numeric(Scenario)], # Map scenario -> dose.
+      Dose = c(
+        NoTreatment = 0,
+        PanCytoVir10mg = 10,
+        PanCytoVir100mg = 100
+      )[as.character(Scenario)], # Map scenario -> dose.
       xvals = Day # Alias required by the fit functions.
     )
 

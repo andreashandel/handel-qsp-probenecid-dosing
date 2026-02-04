@@ -130,7 +130,8 @@ plot_outcomes <- function(
     } else {
       sample_lines <- long %>%
         filter(metric == metric_name) %>%
-        mutate(Scenario = factor(Scenario, levels = scenarios))
+        mutate(Scenario = factor(Scenario, levels = scenarios)) %>%
+        arrange(rep, Scenario, Dose)
 
       p <- p +
         geom_line(

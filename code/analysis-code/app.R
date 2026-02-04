@@ -28,6 +28,9 @@ library(tidyr)     # Pivoting for objective contribution table.
 library(ggplot2)   # Base plotting for time-series output.
 library(patchwork) # Plot layout helper used in timeseries plotting.
 
+# Centralized virus transform helpers.
+source(here::here("code", "analysis-code", "functions", "virus-transform-function.R"))
+
 # Model simulators + fit function
 source(here::here("code", "analysis-code", "functions", "model1-simulator-function.R"))
 source(here::here("code", "analysis-code", "functions", "model2-simulator-function.R"))
@@ -73,14 +76,14 @@ fixedpars_model2 <- load_fixed_parameters(
 sigma_settings <- compute_sigma_settings(
   fitdata,
   sigma_to_fit = c(
-    "sigma_add_LogVirusLoad",
+    paste0("sigma_add_", virus_quantity_name),
     "sigma_add_IL6",
     "sigma_add_WeightLossPerc"
   )
 )
 
 sigma_fixed_labels <- c(
-  sigma_prop_LogVirusLoad = "Sigma (proportional) – Log Virus Load",
+  setNames("Sigma (proportional) – Virus Load", paste0("sigma_prop_", virus_quantity_name)),
   sigma_prop_IL6 = "Sigma (proportional) – IL-6",
   sigma_prop_WeightLossPerc = "Sigma (proportional) – Weight loss"
 )
@@ -172,7 +175,7 @@ fit_param_labels <- c(
   Emax_F = "Maximum innate response suppression",
   C50_F = "Half maximum of innate response effect",
   C50_V = "Half maximum of virus suppression effect",
-  sigma_add_LogVirusLoad = "Sigma (additive) – Log Virus Load",
+  setNames("Sigma (additive) – Virus Load", paste0("sigma_add_", virus_quantity_name)),
   sigma_add_IL6 = "Sigma (additive) – IL-6",
   sigma_add_WeightLossPerc = "Sigma (additive) – Weight loss"
 )
@@ -457,7 +460,7 @@ server <- function(input, output, session) {
     res$breakdown$nll %>%
       mutate(
         Quantity = recode(Quantity,
-                          LogVirusLoad = "V",
+                          VirusLoad = "V",
                           IL6 = "F",
                           WeightLossPerc = "S")
       ) %>%
@@ -477,7 +480,7 @@ server <- function(input, output, session) {
     res$breakdown$ssr %>%
       mutate(
         Quantity = recode(Quantity,
-                          LogVirusLoad = "V",
+                          VirusLoad = "V",
                           IL6 = "F",
                           WeightLossPerc = "S")
       ) %>%

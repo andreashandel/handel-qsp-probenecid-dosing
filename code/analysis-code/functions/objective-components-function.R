@@ -9,6 +9,10 @@
 
 library(dplyr)
 library(tidyr)
+library(here)
+
+# Centralized virus transform helpers.
+source(here::here("code", "analysis-code", "functions", "virus-transform-function.R"))
 
 #' Build a long-format prediction table from simulator output.
 #'
@@ -26,21 +30,23 @@ build_prediction_long <- function(
     stop("sim_df must contain time, Scenario, V, F, and S columns.")
   }
 
+  virus_col <- virus_quantity_name
+
   sim_df %>%
     mutate(
-      LogVirusLoad = log10(pmax(1, .data[["V"]])),
+      !!virus_col := transform_virus(.data[["V"]]),
       IL6 = .data[["F"]],
       WeightLossPerc = .data[["S"]]
     ) %>%
     select(
       Day = all_of(time_col),
       Scenario = all_of(scenario_col),
-      LogVirusLoad,
+      all_of(virus_col),
       IL6,
       WeightLossPerc
     ) %>%
     pivot_longer(
-      cols = c(LogVirusLoad, IL6, WeightLossPerc),
+      cols = c(all_of(virus_col), IL6, WeightLossPerc),
       names_to = "Quantity",
       values_to = "Predicted"
     )
@@ -55,7 +61,14 @@ build_prediction_long <- function(
 collect_sigma_pool <- function(params, fixedpars) {
   vec <- c(params, fixedpars)
   vec <- vec[!is.na(names(vec))]
-  vec[grepl("^sigma_(add|prop)_", names(vec))]
+  vec <- vec[grepl("^sigma_(add|prop)_", names(vec))]
+
+  # De-duplicate by name (keep first occurrence, i.e., fitted over fixed).
+  if (length(vec) && any(duplicated(names(vec)))) {
+    vec <- vec[!duplicated(names(vec))]
+  }
+
+  vec
 }
 
 #' Compute objective components and residuals.
@@ -64,6 +77,7 @@ collect_sigma_pool <- function(params, fixedpars) {
 #' @param pred_long Long predictions with Scenario, Quantity, Day, Predicted.
 #' @param sigma_pool Named vector of sigma parameters (additive + proportional).
 #' @param min_variance Minimum variance to avoid log(0) or divide-by-zero.
+#' @param time_round Decimal places to round Day/time for safe joins.
 #' @return List with:
 #'   - objective: scalar (sum of weighted NLL blocks)
 #'   - breakdown_nll: data.frame with per-block NLL and weights
@@ -74,14 +88,52 @@ compute_objective_components <- function(
   fitdata,
   pred_long,
   sigma_pool,
-  min_variance = 1e-12
+  min_variance = 1e-12,
+  time_round = 8
 ) {
+  # Validate required columns.
+  required_fit <- c("Scenario", "Quantity", "Day", "Value")
+  required_pred <- c("Scenario", "Quantity", "Day", "Predicted")
+  missing_fit <- setdiff(required_fit, names(fitdata))
+  missing_pred <- setdiff(required_pred, names(pred_long))
+  if (length(missing_fit)) {
+    stop("fitdata is missing required columns: ", paste(missing_fit, collapse = ", "))
+  }
+  if (length(missing_pred)) {
+    stop("pred_long is missing required columns: ", paste(missing_pred, collapse = ", "))
+  }
+
+  # Establish stable factor levels.
+  scenario_levels <- if (is.factor(fitdata$Scenario)) {
+    levels(fitdata$Scenario)
+  } else {
+    sort(unique(fitdata$Scenario))
+  }
+  quantity_levels <- if (is.factor(fitdata$Quantity)) {
+    levels(fitdata$Quantity)
+  } else {
+    sort(unique(fitdata$Quantity))
+  }
+
   # Ensure matching types for joins.
+  fitdata <- fitdata %>%
+    mutate(
+      Scenario = factor(Scenario, levels = scenario_levels),
+      Quantity = factor(Quantity, levels = quantity_levels)
+    )
   pred_long <- pred_long %>%
     mutate(
-      Scenario = factor(Scenario, levels = levels(fitdata$Scenario)),
-      Quantity = factor(Quantity, levels = levels(fitdata$Quantity))
+      Scenario = factor(Scenario, levels = scenario_levels),
+      Quantity = factor(Quantity, levels = quantity_levels)
     )
+
+  # Mitigate floating point mismatch between observation days and solver output.
+  if (is.numeric(fitdata$Day)) {
+    fitdata <- fitdata %>% mutate(Day = round(Day, time_round))
+  }
+  if (is.numeric(pred_long$Day)) {
+    pred_long <- pred_long %>% mutate(Day = round(Day, time_round))
+  }
 
   data_joined <- fitdata %>%
     select(Scenario, Quantity, Day, Value) %>%
@@ -96,18 +148,45 @@ compute_objective_components <- function(
     ))
   }
 
-  sigma_tbl <- tibble(name = names(sigma_pool), value = as.numeric(sigma_pool)) %>%
-    filter(grepl("^sigma_(add|prop)_", name)) %>%
-    tidyr::extract(
-      name,
-      into = c("type", "Quantity"),
-      regex = "^sigma_(add|prop)_(.+)$"
-    ) %>%
-    select(Quantity, type, value) %>%
-    pivot_wider(names_from = type, values_from = value)
+  if (nrow(data_joined) < nrow(fitdata)) {
+    return(list(
+      objective = Inf,
+      breakdown_nll = NULL,
+      breakdown_ssr = NULL,
+      residuals = data_joined
+    ))
+  }
 
-  if (!"add" %in% names(sigma_tbl)) sigma_tbl$add <- 0
-  if (!"prop" %in% names(sigma_tbl)) sigma_tbl$prop <- 0
+  sigma_pool <- sigma_pool[!is.na(names(sigma_pool))]
+  if (length(sigma_pool) && any(duplicated(names(sigma_pool)))) {
+    sigma_pool <- sigma_pool[!duplicated(names(sigma_pool))]
+  }
+
+  sigma_tbl <- tibble(name = names(sigma_pool), value = as.numeric(sigma_pool)) %>%
+    filter(grepl("^sigma_(add|prop)_", name))
+
+  if (!nrow(sigma_tbl)) {
+    sigma_tbl <- tibble(
+      Quantity = factor(quantity_levels, levels = quantity_levels),
+      add = 0,
+      prop = 0
+    )
+  } else {
+    sigma_tbl <- sigma_tbl %>%
+      tidyr::extract(
+        name,
+        into = c("type", "Quantity"),
+        regex = "^sigma_(add|prop)_(.+)$"
+      ) %>%
+      select(Quantity, type, value) %>%
+      pivot_wider(names_from = type, values_from = value)
+
+    if (!"add" %in% names(sigma_tbl)) sigma_tbl$add <- 0
+    if (!"prop" %in% names(sigma_tbl)) sigma_tbl$prop <- 0
+
+    sigma_tbl <- sigma_tbl %>%
+      mutate(Quantity = factor(Quantity, levels = quantity_levels))
+  }
 
   weight_tbl <- fitdata %>%
     count(Quantity, Scenario, name = "n") %>%
@@ -160,4 +239,3 @@ compute_objective_components <- function(
     residuals = resid_df
   )
 }
-

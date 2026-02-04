@@ -51,16 +51,19 @@ fit_model_function <- function(
   fixed_sigmas <- grepl("^sigma_(add|prop)_", names(fixedpars))
   fixedpars_ode = fixedpars[!fixed_sigmas]
 
-  # Build a sigma pool that includes both FITTED and FIXED sigma parameters.
-  sigma_pool <- c(params[fit_sigmas], fixedpars[fixed_sigmas])
-
-  # Accumulate predictions across all dosing scenarios.
-  pred_long_list <- list()
+  # Accumulate full simulation outputs across scenarios.
+  sim_list <- list()
 
   # If we fit in log-space, transform parameters back to natural scale.
   if (logfit == 1) {
     fitpars_ode <- exp(fitpars_ode)
+    if (any(fit_sigmas)) {
+      params[fit_sigmas] <- exp(params[fit_sigmas])
+    }
   }
+
+  # Build a sigma pool that includes both FITTED and FIXED sigma parameters.
+  sigma_pool <- c(params[fit_sigmas], fixedpars[fixed_sigmas])
 
   # Loop over all treatment scenarios (one dose per scenario).
   for (i in seq_along(doses)) {
@@ -90,39 +93,18 @@ fit_model_function <- function(
       return(1e10)
     }
 
-    # Extract observed data for each quantity at this scenario.
-    Vvals <- fitdata %>%
-      filter(Quantity == "LogVirusLoad", Scenario == scenarios[i])
-    Innvals <- fitdata %>%
-      filter(Quantity == "IL6", Scenario == scenarios[i])
-    Symvals <- fitdata %>%
-      filter(Quantity == "WeightLossPerc", Scenario == scenarios[i])
-
-    # Simulator time vector for aligning predictions to observation times.
-    tvec <- odeout[, "time"]
-
-    # Model predictions aligned to observed times.
-    Vpred = log10(pmax(1, odeout[match(Vvals$xvals, tvec), "V"]))
-    Innpred = odeout[match(Innvals$xvals, tvec), "F"]
-    Sympred = odeout[match(Symvals$xvals, tvec), "S"]
-
-    pred_long_list[[length(pred_long_list) + 1]] <- data.frame(
-      Scenario = scenarios[i],
-      Day = c(Vvals$xvals, Innvals$xvals, Symvals$xvals),
-      Quantity = c(
-        rep("LogVirusLoad", length(Vvals$xvals)),
-        rep("IL6", length(Innvals$xvals)),
-        rep("WeightLossPerc", length(Symvals$xvals))
-      ),
-      Predicted = c(Vpred, Innpred, Sympred)
-    )
+    # Store full simulator output for consistent prediction handling.
+    ode_df <- as.data.frame(odeout)
+    ode_df$Scenario <- scenarios[i]
+    sim_list[[length(sim_list) + 1]] <- ode_df
   }
 
-  pred_long <- bind_rows(pred_long_list)
+  sim_df <- bind_rows(sim_list)
+  pred_long <- build_prediction_long(sim_df, scenario_col = "Scenario", time_col = "time")
   components <- compute_objective_components(fitdata, pred_long, sigma_pool)
 
   if (!is.finite(components$objective)) {
-    return(Inf)
+    return(1e10)
   }
 
   # Return total objective value to be minimized by the optimizer.

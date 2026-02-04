@@ -10,6 +10,10 @@
 library(ggplot2)   # Plotting.
 library(dplyr)     # Data manipulation.
 library(patchwork) # Layout helper for multi-panel plots.
+library(here)
+
+# Centralized virus transform helpers.
+source(here::here("code", "analysis-code", "functions", "virus-transform-function.R"))
 
 ################################
 # Time-series plotting function
@@ -133,8 +137,8 @@ plot_timeseries <- function(
     data <- recode_dose(data)
 
     Vvals <- data %>%
-      filter(Quantity == "LogVirusLoad") %>%
-      mutate(Value = 10^Value)
+      filter(Quantity == virus_quantity_name) %>%
+      mutate(Value = inverse_transform_virus(Value))
     Innvals <- data %>% filter(Quantity == "IL6")
     Symvals <- data %>% filter(Quantity == "WeightLossPerc")
   } else {

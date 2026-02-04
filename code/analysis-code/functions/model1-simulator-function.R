@@ -71,7 +71,8 @@ model1_simulator <- function(Ad, Ac, At, U, I, V, F, A, S,
         #   browser()
         # }
         # compute log10 virus and prevent negative values
-        logV = pmax(0,log10(pmax(V,1e-10)))
+        #logV = pmax(0,log10(pmax(V,1e-10)))
+        logV = log10(V+1)
 
         # define system of ODEs
         dU = -b * U * V #uninfected cells

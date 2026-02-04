@@ -32,26 +32,15 @@ weight_dat = readxl::read_excel(weightfile, sheet = "DataforAnalysis")
 
 # only keep the scenarios we care about: uninfected/low dose/high dose
 scenarios = c("NoTreatment", "PanCytoVir10mg", "PanCytoVir100mg")
-virus_dat2 <- virus_dat %>% filter(Scenario %in% scenarios)
-immune_dat2 <- immune_dat %>% filter(Scenario %in% scenarios)
-weight_dat2 <- weight_dat %>% filter(Scenario %in% scenarios)
-
-
-# transform virus load to log10 scale
-# add some value to prevent infinity for 0 entries
-# right now setting to 1 before log transform so it's 0 after transform
-cutoff = 1
-dfvir <- virus_dat2 %>%
-  mutate(Value = log10(pmax(Value, cutoff))) %>%
-  mutate(Quantity = replace(Quantity, Quantity == 'VirusLoad', 'LogVirusLoad'))
-
-# don't need to do anything to the immune response data
-dfimm <- immune_dat2
-# don't need to do anything to the weight data
-dfweightchange <- weight_dat2
+dfvir <- virus_dat %>% filter(Scenario %in% scenarios)
+dfimm <- immune_dat %>% filter(Scenario %in% scenarios)
+dfweightchange <- weight_dat %>% filter(Scenario %in% scenarios)
 
 
 ## ---- combinedata --------
+# virus is on natural units
+# immune is on natural units
+# weight is on percent change
 df_all <- bind_rows(dfvir, dfimm, dfweightchange)
 
 

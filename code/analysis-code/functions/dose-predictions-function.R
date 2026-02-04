@@ -9,6 +9,10 @@
 library(deSolve) # ODE solver interface.
 library(dplyr)   # Data manipulation for summarization.
 library(caTools) # trapz() for AUC calculations.
+library(here)
+
+# Centralized virus transform helpers.
+source(here::here("code", "analysis-code", "functions", "virus-transform-function.R"))
 
 #' Simulate dose-response outcomes and time-series for a fitted model.
 #'
@@ -78,6 +82,7 @@ simulate_dose_predictions <- function(
 
     # Store full trajectories only for the requested doses.
     ts_store <- list()
+    failures <- list()
 
     for (i in seq_along(all_doses)) {
       # Assemble the full parameter list for the simulator.
@@ -99,8 +104,31 @@ simulate_dose_predictions <- function(
       )
 
       # Run the ODE simulator and coerce to data.frame for downstream use.
-      odeout <- do.call(simulatorname, allpars)
+      odeout <- tryCatch(
+        do.call(simulatorname, allpars),
+        error = function(e) e
+      )
+      if (inherits(odeout, "error")) {
+        failures[[length(failures) + 1]] <- tibble(
+          Schedule = schedule_name,
+          Dose = all_doses[i],
+          Message = conditionMessage(odeout)
+        )
+        next
+      }
+
       ode_df <- as.data.frame(odeout)
+      if (!all(is.finite(ode_df$time)) ||
+          any(!is.finite(ode_df$V)) ||
+          any(!is.finite(ode_df$F)) ||
+          any(!is.finite(ode_df$S))) {
+        failures[[length(failures) + 1]] <- tibble(
+          Schedule = schedule_name,
+          Dose = all_doses[i],
+          Message = "Non-finite values in ODE output."
+        )
+        next
+      }
 
       # Add free drug and PD effect variables for plotting; mirror ODE definitions.
       Ct <- ode_df$At / as.numeric(allpars["Vt"]) # Total drug concentration.
@@ -117,7 +145,7 @@ simulate_dose_predictions <- function(
       # AUCs for outcomes of interest.
       summary_df$AUCV[i] <- caTools::trapz(
         ode_df$time,
-        log10(pmax(1, ode_df$V)) # Log-scale viral load with LOD clamp.
+        transform_virus(ode_df$V)
       )
       summary_df$AUCF[i] <- caTools::trapz(ode_df$time, ode_df$F) # Innate response AUC.
       summary_df$AUCS[i] <- caTools::trapz(ode_df$time, ode_df$S) # Symptom AUC.
@@ -138,7 +166,8 @@ simulate_dose_predictions <- function(
     # Return both the summary table and the time-series data.
     list(
       summary = summary_df,
-      timeseries = if (length(ts_store)) bind_rows(ts_store) else tibble()
+      timeseries = if (length(ts_store)) bind_rows(ts_store) else tibble(),
+      failures = if (length(failures)) bind_rows(failures) else tibble()
     )
   }
 
@@ -197,6 +226,15 @@ simulate_dose_predictions <- function(
   # Combine schedule-specific outputs into a single data.frame each.
   all_results_df <- bind_rows(lapply(all_results, `[[`, "summary"))
   timeseries_df <- bind_rows(lapply(all_results, `[[`, "timeseries"))
+  failures_df <- bind_rows(lapply(all_results, `[[`, "failures"))
+
+  if (nrow(failures_df)) {
+    warning(
+      "Dose-response simulations had failures for ",
+      nrow(failures_df),
+      " dose-schedule combinations. These entries were skipped."
+    )
+  }
 
   # Friendly labels for downstream plotting.
   label_map <- c(
@@ -216,6 +254,7 @@ simulate_dose_predictions <- function(
     all_results_df = all_results_df,
     reduction_df = reduction_df,
     timeseries_df = timeseries_df,
-    ts_doses = ts_doses
+    ts_doses = ts_doses,
+    failures = failures_df
   )
 }

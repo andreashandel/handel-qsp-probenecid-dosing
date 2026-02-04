@@ -52,7 +52,7 @@ source(here::here("code", "analysis-code", "functions", "fit-single-function.R")
 # -----------------------------------------------------------------------------
 # User settings (common to all stages)
 # -----------------------------------------------------------------------------
-model_choice <- "model2" # "model1" or "model2".
+model_choice <- "model1" # "model1" or "model2".
 
 # If FALSE, only the multistart stage is run (no fixed-parameter sampling).
 run_sampling_stage <- TRUE
@@ -129,12 +129,12 @@ mix_best_fraction <- 0.2
 #   - Useful Options: "NLOPT_LN_COBYLA", "NLOPT_LN_SBPLX",
 #     "NLOPT_LN_NELDERMEAD", "NLOPT_LN_BOBYQA"
 #stage2_algorithms <- c("NLOPT_LN_COBYLA", "NLOPT_LN_BOBYQA")
-#stage2_algorithms <- c("NLOPT_LN_COBYLA")
+stage2_algorithms <- c("NLOPT_LN_COBYLA")
 #stage2_algorithms <- c("NLOPT_LN_SBPLX")
-stage2_algorithms <- c("NLOPT_LN_BOBYQA")
+#stage2_algorithms <- c("NLOPT_LN_BOBYQA")
 
 # Stage 2 optimizer settings.
-stage2_maxeval <- 500
+stage2_maxeval <- 200
 
 # Fit in log space for positive parameters (multistart mode).
 #   - TRUE means the optimizer sees log(parameters), which ensures positivity
@@ -149,7 +149,7 @@ seed_value <- 1234
 # User settings (sampling stage: single-fit mode for fixed-parameter samples)
 # -----------------------------------------------------------------------------
 # Number of random fixed-parameter samples. 0 = only baseline fixed parameters.
-nsamp <- 100
+nsamp <- 10
 
 # Force specific fixed parameters to a chosen value across all samples.
 fixed_overrides <- c(Emax_V = 1)
@@ -159,7 +159,7 @@ fixed_overrides <- c(Emax_V = 1)
 #     multistart, but only for the sampling stage.
 #sample_algorithm <- "NLOPT_LN_BOBYQA"
 sample_algorithm <- "NLOPT_LN_COBYLA"
-sample_maxeval <- 2000
+sample_maxeval <- 200
 sample_ftol_rel <- 1e-10
 sample_logfit <- TRUE
 

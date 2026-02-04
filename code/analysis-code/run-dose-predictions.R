@@ -50,8 +50,8 @@ timeseries_doses <- c(0, 1, 10, 1e2, 1e3, 1e4)
 workers <- NULL
 
 # ODE solver settings.
-solvertype <- "lsoda"
-tols <- 1e-9
+solvertype <- "vode"
+tols <- 1e-10
 dt <- 0.01
 tfinal <- 7
 
