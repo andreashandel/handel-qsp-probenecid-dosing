@@ -22,6 +22,10 @@
 #   ka, Vc, Vt, Q, Vmax, Km, fmax, f50         = PK parameters
 # --------------------------------------------------------------------------------
 library(deSolve)
+library(here)
+
+# Centralized virus transform helpers.
+source(here::here("code", "analysis-code", "functions", "virus-transform-function.R"))
 
 # to test run this
 #model1_simulator(Ad = 0, Ac = 0, At = 0, U = 1e7, I = 0, V = 1, F = 0, A = 1, S = 0, b = 1e-8, cI = 1, k = 1e-6, p = 1e3, kF = 1e-3, cV = 10, gF = 1, hV = 1e4, Fmax = 10, cF = 5, hF = 10, gA = 1, gS = 1, cS = 2, Emax_V = 1, C50_V = 10, Emax_F = 0.5, C50_F = 10, ka = 2, Vc = 4, Vt = 20, Q = 5, Vmax = 1.6, Km = 60, fmax = 0.5, f50 = 0.12, Ad0 = 100, txstart = 1, txinterval = 0.5, txend = 4, tstart = 0, tfinal = 10, dt = 0.01, solvertype = "lsoda", tols = 1e-9)
@@ -71,8 +75,8 @@ model1_simulator <- function(Ad, Ac, At, U, I, V, F, A, S,
         #   browser()
         # }
         # compute log10 virus and prevent negative values
-        #logV = pmax(0,log10(pmax(V,1e-10)))
-        logV = log10(V+1)
+        # transformed virus for immune induction (centralized helper)
+        logV = transform_virus(V)
 
         # define system of ODEs
         dU = -b * U * V #uninfected cells
