@@ -18,6 +18,10 @@
 #   S   = symptom/morbidity proxy (e.g., weight loss)
 # --------------------------------------------------------------------------------
 library(deSolve)
+library(here)
+
+# Centralized virus transform helpers.
+source(here::here("code", "analysis-code", "functions", "virus-transform-function.R"))
 
 # to test run this
 #model2_simulator(Ad = 0, Ac = 0, At = 0, U = 1e7, E = 0, I = 0, V = 1, F = 0, A = 1, S = 0, b = 1e-8, cE =3, cI = 1, k = 1e-6, p = 1e3, kF = 1e-3, cV = 10, gF = 1, hV = 1e4, Fmax = 10, cF = 5, hF = 10, gA = 1, gS = 1, cS = 2, Emax_V = 1, C50_V = 10, Emax_F = 0.5, C50_F = 10, ka = 2, Vc = 4, Vt = 20, Q = 5, Vmax = 1.6, Km = 60, fmax = 0.5, f50 = 0.12, Ad0 = 100, txstart = 1, txinterval = 0.5, txend = 4, tstart = 0, tfinal = 10, dt = 0.01, solvertype = "lsoda", tols = 1e-9)
@@ -45,29 +49,9 @@ model2_simulator <- function(Ad, Ac, At, U, E, I, V, F, A, S,
         Cu = fu * Ct #drug concentration in tissue compartment
         fV = Emax_V * Cu / (C50_V + Cu) #effect of drug on virus
         fF = Emax_F * Cu / (C50_F + Cu) #effect of drug on innate
-        #fV = 0.9  #effect of drug on virus
-        #fF = 0.9  #effect of drug on innate
-       
         
-        # avoid virus to go to very low levels and then rebound
-        # is biologically unreasonable since very low virus means clearance
-        # this is the 'nanofox' problem when doing ODEs with low quantities
-        # theoretically, <1 virus particle means extinction
-        # however, we run the modeil in units of PFU/ml of virus in lung
-        # unclear how that exactly translates to number of infectious virus particles
-        # thus setting some low but reasonable threshold
-        # see my 2007 PCB paper for more discussions
-        # if (V < 0) {
-        #   V <- 0
-        #   dV <- 0
-        # } else {
-        #   dV = (1 - fV) * p * I / (1 + kF * F) - cV * V #virus
-        # }
-        # if (V<0) {
-        #   browser()
-        # }
-        # compute log10 virus and prevent negative values
-        logV = pmax(0,log10(pmax(V,1e-10)))
+        # compute log10 virus and prevent negative values (centralized helper function)
+        logV = transform_virus(V)
 
         # define system of ODEs
         dU = -b * U * V #uninfected cells
