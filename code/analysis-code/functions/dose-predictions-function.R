@@ -71,6 +71,7 @@ simulate_dose_predictions <- function(
     dt,
     tfinal
   ) {
+    time_tolerance <- dt / 2
     # Store the AUC summaries for each dose in this schedule.
     summary_df <- tibble(
       Dose = all_doses,
@@ -83,6 +84,7 @@ simulate_dose_predictions <- function(
     # Store full trajectories only for the requested doses.
     ts_store <- list()
     failures <- list()
+    warnings <- list()
 
     for (i in seq_along(all_doses)) {
       # Assemble the full parameter list for the simulator.
@@ -103,10 +105,20 @@ simulate_dose_predictions <- function(
         )
       )
 
-      # Run the ODE simulator and coerce to data.frame for downstream use.
-      odeout <- tryCatch(
-        do.call(simulatorname, allpars),
-        error = function(e) e
+      # Run the ODE simulator and capture warnings/errors.
+      odeout <- withCallingHandlers(
+        tryCatch(
+          do.call(simulatorname, allpars),
+          error = function(e) e
+        ),
+        warning = function(w) {
+          warnings[[length(warnings) + 1]] <- tibble(
+            Schedule = schedule_name,
+            Dose = all_doses[i],
+            Message = conditionMessage(w)
+          )
+          invokeRestart("muffleWarning")
+        }
       )
       if (inherits(odeout, "error")) {
         failures[[length(failures) + 1]] <- tibble(
@@ -126,6 +138,14 @@ simulate_dose_predictions <- function(
           Schedule = schedule_name,
           Dose = all_doses[i],
           Message = "Non-finite values in ODE output."
+        )
+        next
+      }
+      if (max(ode_df$time, na.rm = TRUE) < (tfinal - time_tolerance)) {
+        failures[[length(failures) + 1]] <- tibble(
+          Schedule = schedule_name,
+          Dose = all_doses[i],
+          Message = "ODE output ended before tfinal; skipping incomplete trajectory."
         )
         next
       }
@@ -167,7 +187,8 @@ simulate_dose_predictions <- function(
     list(
       summary = summary_df,
       timeseries = if (length(ts_store)) bind_rows(ts_store) else tibble(),
-      failures = if (length(failures)) bind_rows(failures) else tibble()
+      failures = if (length(failures)) bind_rows(failures) else tibble(),
+      warnings = if (length(warnings)) bind_rows(warnings) else tibble()
     )
   }
 
@@ -175,7 +196,7 @@ simulate_dose_predictions <- function(
   # Prepare model parameters for simulation
   # ---------------------------------------------------------------------------
   # Simulate on a wide dose grid plus the explicit time-series doses.
-  all_doses <- sort(unique(c(ts_doses, 10^seq(-2, 5, length = 100))))
+  all_doses <- sort(unique(c(ts_doses, 10^seq(-2, 4, length = 100))))
 
   # Extract fitted and fixed parameters from the bestfit object.
   fitpars <- bestfit$fitpars
@@ -227,12 +248,20 @@ simulate_dose_predictions <- function(
   all_results_df <- bind_rows(lapply(all_results, `[[`, "summary"))
   timeseries_df <- bind_rows(lapply(all_results, `[[`, "timeseries"))
   failures_df <- bind_rows(lapply(all_results, `[[`, "failures"))
+  warnings_df <- bind_rows(lapply(all_results, `[[`, "warnings"))
 
   if (nrow(failures_df)) {
     warning(
       "Dose-response simulations had failures for ",
       nrow(failures_df),
       " dose-schedule combinations. These entries were skipped."
+    )
+  }
+  if (nrow(warnings_df)) {
+    warning(
+      "Dose-response simulations emitted ",
+      nrow(warnings_df),
+      " warnings. See the warnings table in the output object."
     )
   }
 
@@ -255,6 +284,7 @@ simulate_dose_predictions <- function(
     reduction_df = reduction_df,
     timeseries_df = timeseries_df,
     ts_doses = ts_doses,
-    failures = failures_df
+    failures = failures_df,
+    warnings = warnings_df
   )
 }

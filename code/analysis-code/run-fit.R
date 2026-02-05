@@ -60,7 +60,8 @@ run_sampling_stage <- TRUE
 # Parallel workers for both stages.
 #   - NULL = let each stage choose a sensible default based on available cores.
 #   - Any positive integer will cap workers in both stages.
-n_workers <- NULL
+#n_workers <- NULL
+n_workers <- 30
 
 # Out-of-bounds handling for initial parameter values (both stages).
 # Options:
@@ -72,14 +73,15 @@ oob_action <- "clamp"
 sigma_to_fit <- character(0)
 
 # Optional ad-hoc fixed parameters (removed from fit vector)
-user_fixed_params <- c(Emax_F = 1)
+#user_fixed_params <- c(Emax_F = 1)
+user_fixed_params <- c()
 
 # ODE solver settings (used by both stages)
 solver_settings <- list(
   solvertype = "vode",
   tols = 1e-8,
   tfinal = 7,
-  dt = 0.05
+  dt = 0.02
 )
 
 # -----------------------------------------------------------------------------
@@ -88,13 +90,14 @@ solver_settings <- list(
 # NOTE: We only save bestfit-multistart and bestfit-sample files.
 
 # Number of random starts for global exploration.
-n_starts <- 200
+n_starts <- 100
 
 # Stage 1 screening settings (fast local search or single evaluation).
 #   - stage1_maxeval = 1 means "evaluate objective once at the start point".
 #   - stage1_maxeval > 1 runs a very short local search to de-noise poor starts.
-stage1_algorithm <- "NLOPT_LN_COBYLA"
-stage1_maxeval <- 1
+#stage1_algorithm <- "NLOPT_LN_COBYLA"
+stage1_algorithm <- "NLOPT_LN_NELDERMEAD"
+stage1_maxeval <- 100
 
 # Candidate filtering after Stage 1 screening.
 #   - We compute an objective value for each candidate.
@@ -134,7 +137,7 @@ stage2_algorithms <- c("NLOPT_LN_COBYLA")
 #stage2_algorithms <- c("NLOPT_LN_BOBYQA")
 
 # Stage 2 optimizer settings.
-stage2_maxeval <- 200
+stage2_maxeval <- 500
 
 # Fit in log space for positive parameters (multistart mode).
 #   - TRUE means the optimizer sees log(parameters), which ensures positivity
@@ -149,7 +152,7 @@ seed_value <- 1234
 # User settings (sampling stage: single-fit mode for fixed-parameter samples)
 # -----------------------------------------------------------------------------
 # Number of random fixed-parameter samples. 0 = only baseline fixed parameters.
-nsamp <- 10
+nsamp <- 30
 
 # Force specific fixed parameters to a chosen value across all samples.
 fixed_overrides <- c(Emax_V = 1)
@@ -159,75 +162,13 @@ fixed_overrides <- c(Emax_V = 1)
 #     multistart, but only for the sampling stage.
 #sample_algorithm <- "NLOPT_LN_BOBYQA"
 sample_algorithm <- "NLOPT_LN_COBYLA"
-sample_maxeval <- 200
+sample_maxeval <- 500
 sample_ftol_rel <- 1e-10
 sample_logfit <- TRUE
 
 # If nsamp == 0 (single fit), set sample_print_level > 0 for optimizer output.
 sample_print_level <- 1
 
-# -----------------------------------------------------------------------------
-# Validate optimizer algorithm names (fail fast with a clear message)
-# -----------------------------------------------------------------------------
-# This prevents late failures inside nloptr when an invalid algorithm name
-# is supplied in user settings.
-valid_nloptr_algorithms <- c(
-  "NLOPT_GN_DIRECT",
-  "NLOPT_GN_DIRECT_L",
-  "NLOPT_GN_DIRECT_L_RAND",
-  "NLOPT_GN_DIRECT_NOSCAL",
-  "NLOPT_GN_DIRECT_L_NOSCAL",
-  "NLOPT_GN_DIRECT_L_RAND_NOSCAL",
-  "NLOPT_GN_ORIG_DIRECT",
-  "NLOPT_GN_ORIG_DIRECT_L",
-  "NLOPT_GD_STOGO",
-  "NLOPT_GD_STOGO_RAND",
-  "NLOPT_LD_SLSQP",
-  "NLOPT_LD_LBFGS",
-  "NLOPT_LN_PRAXIS",
-  "NLOPT_LD_VAR1",
-  "NLOPT_LD_VAR2",
-  "NLOPT_LD_TNEWTON",
-  "NLOPT_LD_TNEWTON_RESTART",
-  "NLOPT_LD_TNEWTON_PRECOND",
-  "NLOPT_LD_TNEWTON_PRECOND_RESTART",
-  "NLOPT_GN_CRS2_LM",
-  "NLOPT_GN_MLSL",
-  "NLOPT_GD_MLSL",
-  "NLOPT_GN_MLSL_LDS",
-  "NLOPT_GD_MLSL_LDS",
-  "NLOPT_LD_MMA",
-  "NLOPT_LD_CCSAQ",
-  "NLOPT_LN_COBYLA",
-  "NLOPT_LN_NEWUOA",
-  "NLOPT_LN_NEWUOA_BOUND",
-  "NLOPT_LN_NELDERMEAD",
-  "NLOPT_LN_SBPLX",
-  "NLOPT_LN_AUGLAG",
-  "NLOPT_LD_AUGLAG",
-  "NLOPT_LN_AUGLAG_EQ",
-  "NLOPT_LD_AUGLAG_EQ",
-  "NLOPT_LN_BOBYQA",
-  "NLOPT_GN_ISRES",
-  "NLOPT_GN_ESCH"
-)
-
-validate_algorithms <- function(algos, label) {
-  bad <- setdiff(algos, valid_nloptr_algorithms)
-  if (length(bad) > 0) {
-    stop(
-      label,
-      " contains invalid NLOPT algorithms: ",
-      paste(bad, collapse = ", "),
-      ". Valid options include: ",
-      paste(valid_nloptr_algorithms, collapse = ", ")
-    )
-  }
-}
-
-validate_algorithms(sample_algorithm, "sample_algorithm")
-validate_algorithms(stage1_algorithm, "stage1_algorithm")
-validate_algorithms(stage2_algorithms, "stage2_algorithms")
 
 # -----------------------------------------------------------------------------
 # Execution timing and run header
@@ -809,7 +750,7 @@ if (isTRUE(run_sampling_stage)) {
 
   if (length(fixed_samples) > 1) {
     workers_sampling <- if (is.null(n_workers)) {
-      future::availableCores()
+      max(1, future::availableCores() - 1)
     } else {
       n_workers
     }

@@ -51,7 +51,7 @@ workers <- NULL
 
 # ODE solver settings.
 solvertype <- "vode"
-tols <- 1e-10
+tols <- 1e-12
 dt <- 0.01
 tfinal <- 7
 
@@ -118,6 +118,34 @@ if (nsamp > 1) {
 # Attach the selected time-series doses as metadata.
 attr(simres_list, "ts_doses") <- timeseries_doses
 attr(simres_list, "bestfit_file") <- bestfit_file
+
+# -----------------------------------------------------------------------------
+# Save warnings/errors from dose-response simulations
+# -----------------------------------------------------------------------------
+message_rows <- lapply(seq_along(simres_list), function(i) {
+  res <- simres_list[[i]]
+  warn_df <- res$warnings
+  fail_df <- res$failures
+
+  warn_df$Type <- if (nrow(warn_df)) "warning" else character(0)
+  fail_df$Type <- if (nrow(fail_df)) "error" else character(0)
+
+  bind_rows(warn_df, fail_df) %>%
+    mutate(Sample = i)
+})
+
+messages_df <- bind_rows(message_rows)
+
+messages_file <- here::here(
+  "results",
+  "output",
+  paste0(model_choice, "-dose-response-messages.csv")
+)
+
+if (nrow(messages_df)) {
+  write.csv(messages_df, messages_file, row.names = FALSE)
+  message("Saved dose-response warnings/errors to: ", messages_file)
+}
 
 # Ensure output directory exists.
 output_dir <- here::here("results", "output")

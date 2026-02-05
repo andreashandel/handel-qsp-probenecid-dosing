@@ -53,29 +53,9 @@ model1_simulator <- function(Ad, Ac, At, U, I, V, F, A, S,
         Cu = fu * Ct #drug concentration in tissue compartment
         fV = Emax_V * Cu / (C50_V + Cu) #effect of drug on virus
         fF = Emax_F * Cu / (C50_F + Cu) #effect of drug on innate
-        #fV = 0.9  #effect of drug on virus
-        #fF = 0.9  #effect of drug on innate
        
         
-        # avoid virus to go to very low levels and then rebound
-        # is biologically unreasonable since very low virus means clearance
-        # this is the 'nanofox' problem when doing ODEs with low quantities
-        # theoretically, <1 virus particle means extinction
-        # however, we run the modeil in units of PFU/ml of virus in lung
-        # unclear how that exactly translates to number of infectious virus particles
-        # thus setting some low but reasonable threshold
-        # see my 2007 PCB paper for more discussions
-        # if (V < 0) {
-        #   V <- 0
-        #   dV <- 0
-        # } else {
-        #   dV = (1 - fV) * p * I / (1 + kF * F) - cV * V #virus
-        # }
-        # if (V<0) {
-        #   browser()
-        # }
-        # compute log10 virus and prevent negative values
-        # transformed virus for immune induction (centralized helper)
+        # compute log10 virus and prevent negative values (centralized helper function)
         logV = transform_virus(V)
 
         # define system of ODEs
