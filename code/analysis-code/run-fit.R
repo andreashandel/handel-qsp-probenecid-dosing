@@ -55,13 +55,13 @@ source(here::here("code", "analysis-code", "functions", "fit-single-function.R")
 model_choice <- "model1" # "model1" or "model2".
 
 # If FALSE, only the multistart stage is run (no fixed-parameter sampling).
-run_sampling_stage <- TRUE
+run_sampling_stage <- FALSE
 
-# Parallel workers for both stages.
+# Parallel workers for all stages.
 #   - NULL = let each stage choose a sensible default based on available cores.
 #   - Any positive integer will cap workers in both stages.
 #n_workers <- NULL
-n_workers <- 30
+n_workers <- 10
 
 # Out-of-bounds handling for initial parameter values (both stages).
 # Options:
@@ -79,10 +79,31 @@ user_fixed_params <- c()
 # ODE solver settings (used by both stages)
 solver_settings <- list(
   solvertype = "vode",
-  tols = 1e-8,
+  tols = 1e-10,
   tfinal = 7,
-  dt = 0.02
+  dt = 0.1
 )
+
+# -----------------------------------------------------------------------------
+# Parallel plan helpers (clean setup/teardown per stage)
+# -----------------------------------------------------------------------------
+setup_parallel_plan <- function(workers, stage_label) {
+  workers <- min(workers, future::availableCores())
+  if (workers > 1) {
+    future::plan(multisession, workers = workers)
+    message(sprintf("%s: parallel plan set to multisession with %d workers.", stage_label, workers))
+  } else {
+    future::plan(sequential)
+    message(sprintf("%s: parallel plan set to sequential.", stage_label))
+  }
+  workers
+}
+
+teardown_parallel_plan <- function(stage_label) {
+  future::plan(sequential)
+  message(sprintf("%s: parallel plan shut down (sequential).", stage_label))
+  invisible(gc())
+}
 
 # -----------------------------------------------------------------------------
 # User settings (multistart stage)
@@ -95,8 +116,8 @@ n_starts <- 100
 # Stage 1 screening settings (fast local search or single evaluation).
 #   - stage1_maxeval = 1 means "evaluate objective once at the start point".
 #   - stage1_maxeval > 1 runs a very short local search to de-noise poor starts.
-#stage1_algorithm <- "NLOPT_LN_COBYLA"
-stage1_algorithm <- "NLOPT_LN_NELDERMEAD"
+stage1_algorithm <- "NLOPT_LN_COBYLA"
+#stage1_algorithm <- "NLOPT_LN_NELDERMEAD"
 stage1_maxeval <- 100
 
 # Candidate filtering after Stage 1 screening.
@@ -137,7 +158,7 @@ stage2_algorithms <- c("NLOPT_LN_COBYLA")
 #stage2_algorithms <- c("NLOPT_LN_BOBYQA")
 
 # Stage 2 optimizer settings.
-stage2_maxeval <- 500
+stage2_maxeval <- 2000
 
 # Fit in log space for positive parameters (multistart mode).
 #   - TRUE means the optimizer sees log(parameters), which ensures positivity
@@ -152,7 +173,7 @@ seed_value <- 1234
 # User settings (sampling stage: single-fit mode for fixed-parameter samples)
 # -----------------------------------------------------------------------------
 # Number of random fixed-parameter samples. 0 = only baseline fixed parameters.
-nsamp <- 30
+nsamp <- 100
 
 # Force specific fixed parameters to a chosen value across all samples.
 fixed_overrides <- c(Emax_V = 1)
@@ -162,7 +183,7 @@ fixed_overrides <- c(Emax_V = 1)
 #     multistart, but only for the sampling stage.
 #sample_algorithm <- "NLOPT_LN_BOBYQA"
 sample_algorithm <- "NLOPT_LN_COBYLA"
-sample_maxeval <- 500
+sample_maxeval <- 2500
 sample_ftol_rel <- 1e-10
 sample_logfit <- TRUE
 
@@ -480,13 +501,7 @@ par_ini_full <- handle_oob_initials(par_ini_full, lb, ub, "Baseline")
   } else {
     n_workers
   }
-  workers_multistart <- min(workers_multistart, future::availableCores())
-
-  if (workers_multistart > 1) {
-    future::plan(multisession, workers = workers_multistart)
-  } else {
-    future::plan(sequential)
-  }
+  workers_multistart <- setup_parallel_plan(workers_multistart, "Stage 1")
 
   message(
     "Stage 1: screening ",
@@ -513,6 +528,8 @@ par_ini_full <- handle_oob_initials(par_ini_full, lb, ub, "Baseline")
     print(err_table[seq_len(min(5, length(err_table)))])
     stop("Stage 1 failed for all candidates. See errors above.")
   }
+
+  teardown_parallel_plan("Stage 1")
 
   # Apply the Stage 1 cutoff rule:
   #   - keep candidates with finite objectives
@@ -611,6 +628,13 @@ par_ini_full <- handle_oob_initials(par_ini_full, lb, ub, "Baseline")
     )
   )
 
+  workers_refine <- if (is.null(n_workers)) {
+    max(1, future::availableCores() - 1)
+  } else {
+    n_workers
+  }
+  workers_refine <- setup_parallel_plan(workers_refine, "Stage 2")
+
   bestfits <- future_lapply(
     seq_len(nrow(stage2_grid)),
     function(i) {
@@ -642,6 +666,8 @@ par_ini_full <- handle_oob_initials(par_ini_full, lb, ub, "Baseline")
     future.seed = TRUE
   )
 
+  teardown_parallel_plan("Stage 2")
+
   best_objectives <- vapply(bestfits, function(x) x$objective, numeric(1))
   best_idx <- which.min(best_objectives)
   bestfit <- bestfits[[best_idx]]
@@ -661,8 +687,6 @@ par_ini_full <- handle_oob_initials(par_ini_full, lb, ub, "Baseline")
 
   saveRDS(bestfits, output_file)
   message("Saved all refined fits to: ", output_file)
-
-  future::plan(sequential)
 }
 
 # -----------------------------------------------------------------------------
@@ -754,8 +778,7 @@ if (isTRUE(run_sampling_stage)) {
     } else {
       n_workers
     }
-    workers_sampling <- min(workers_sampling, future::availableCores())
-    future::plan(multisession, workers = workers_sampling)
+    workers_sampling <- setup_parallel_plan(workers_sampling, "Sampling")
     message("Running sampling stage in parallel with ", workers_sampling, " workers.")
 
     bestfit_all <- future_lapply(
@@ -765,7 +788,7 @@ if (isTRUE(run_sampling_stage)) {
       future.seed = TRUE
     )
 
-    future::plan(sequential)
+    teardown_parallel_plan("Sampling")
   } else {
     message("Single sample detected; running sequentially.")
     bestfit_all[[1]] <- fit_one_sample(1, print_level = sample_print_level)

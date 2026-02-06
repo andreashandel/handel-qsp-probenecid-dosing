@@ -51,8 +51,9 @@ fit_model_function <- function(
   fixed_sigmas <- grepl("^sigma_(add|prop)_", names(fixedpars))
   fixedpars_ode = fixedpars[!fixed_sigmas]
 
-  # Accumulate full simulation outputs across scenarios.
-  sim_list <- list()
+  # Accumulate objective contributions across scenarios to avoid holding
+  # full simulation outputs in memory at once.
+  objective_total <- 0
 
   # If we fit in log-space, transform parameters back to natural scale.
   if (logfit == 1) {
@@ -93,20 +94,27 @@ fit_model_function <- function(
       return(1e10)
     }
 
-    # Store full simulator output for consistent prediction handling.
     ode_df <- as.data.frame(odeout)
+    keep_cols <- c("time", "V", "F", "S")
+    ode_df <- ode_df[, keep_cols, drop = FALSE]
     ode_df$Scenario <- scenarios[i]
-    sim_list[[length(sim_list) + 1]] <- ode_df
-  }
 
-  sim_df <- bind_rows(sim_list)
-  pred_long <- build_prediction_long(sim_df, scenario_col = "Scenario", time_col = "time")
-  components <- compute_objective_components(fitdata, pred_long, sigma_pool)
+    pred_long <- build_prediction_long(ode_df, scenario_col = "Scenario", time_col = "time")
+    fitdata_i <- fitdata[fitdata$Scenario == scenarios[i], , drop = FALSE]
+    components <- compute_objective_components(
+      fitdata_i,
+      pred_long,
+      sigma_pool,
+      objective_only = TRUE
+    )
 
-  if (!is.finite(components$objective)) {
-    return(1e10)
+    if (!is.finite(components$objective)) {
+      return(1e10)
+    }
+
+    objective_total <- objective_total + components$objective
   }
 
   # Return total objective value to be minimized by the optimizer.
-  return(components$objective)
+  return(objective_total)
 }

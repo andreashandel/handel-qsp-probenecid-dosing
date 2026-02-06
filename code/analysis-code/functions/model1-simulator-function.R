@@ -62,8 +62,7 @@ model1_simulator <- function(Ad, Ac, At, U, I, V, F, A, S,
         dU = -b * U * V #uninfected cells
         dI = b * U * V - cI * I - k * I * A #infected cells
         dV = (1 - fV) * p * I / (1 + kF * F) - cV * V #virus
-        dF = (1 - fF) * gF * (logV / (logV + hV)) * (Fmax - F) - cF * F #innate response
-        #dF = (1 - fF) * gF * (V / (V + hV)) * (Fmax - F) - cF * F #innate response
+        dF = (1 - fF) * gF * logV / (logV + hV) * (Fmax - F) - cF * F #innate response
         dA =  F / (F + hF) + gA * A #adaptive response
         dS = gS * F - cS * S #symptoms
 

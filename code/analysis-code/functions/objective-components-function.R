@@ -78,6 +78,8 @@ collect_sigma_pool <- function(params, fixedpars) {
 #' @param sigma_pool Named vector of sigma parameters (additive + proportional).
 #' @param min_variance Minimum variance to avoid log(0) or divide-by-zero.
 #' @param time_round Decimal places to round Day/time for safe joins.
+#' @param objective_only If TRUE, return only the scalar objective (skip
+#'   residuals and breakdown tables) to reduce memory use during fitting.
 #' @return List with:
 #'   - objective: scalar (sum of weighted NLL blocks)
 #'   - breakdown_nll: data.frame with per-block NLL and weights
@@ -89,7 +91,8 @@ compute_objective_components <- function(
   pred_long,
   sigma_pool,
   min_variance = 1e-12,
-  time_round = 8
+  time_round = 8,
+  objective_only = FALSE
 ) {
   # Validate required columns.
   required_fit <- c("Scenario", "Quantity", "Day", "Value")
@@ -153,8 +156,13 @@ compute_objective_components <- function(
       objective = Inf,
       breakdown_nll = NULL,
       breakdown_ssr = NULL,
-      residuals = data_joined
+      residuals = if (objective_only) NULL else data_joined
     ))
+  }
+
+  if (isTRUE(objective_only)) {
+    data_joined <- data_joined %>%
+      select(Scenario, Quantity, Value, Predicted)
   }
 
   sigma_pool <- sigma_pool[!is.na(names(sigma_pool))]
@@ -194,23 +202,45 @@ compute_objective_components <- function(
 
   resid_df <- data_joined %>%
     left_join(sigma_tbl, by = "Quantity") %>%
-    left_join(weight_tbl, by = c("Quantity", "Scenario")) %>%
-    mutate(
-      add = ifelse(is.na(add), 0, add),
-      prop = ifelse(is.na(prop), 0, prop),
-      Variance = pmax(add^2 + (prop * Predicted)^2, min_variance),
-      Residual = Value - Predicted,
-      StdResid = Residual / sqrt(Variance),
-      NLLPoint = 0.5 * (log(Variance) + (Residual^2) / Variance),
-      NLLWeightedResid = sqrt(weight) * StdResid
-    )
+    left_join(weight_tbl, by = c("Quantity", "Scenario"))
+
+  if (isTRUE(objective_only)) {
+    resid_df <- resid_df %>%
+      mutate(
+        add = ifelse(is.na(add), 0, add),
+        prop = ifelse(is.na(prop), 0, prop),
+        Variance = pmax(add^2 + (prop * Predicted)^2, min_variance),
+        Residual = Value - Predicted,
+        NLLPoint = 0.5 * (log(Variance) + (Residual^2) / Variance)
+      )
+  } else {
+    resid_df <- resid_df %>%
+      mutate(
+        add = ifelse(is.na(add), 0, add),
+        prop = ifelse(is.na(prop), 0, prop),
+        Variance = pmax(add^2 + (prop * Predicted)^2, min_variance),
+        Residual = Value - Predicted,
+        StdResid = Residual / sqrt(Variance),
+        NLLPoint = 0.5 * (log(Variance) + (Residual^2) / Variance),
+        NLLWeightedResid = sqrt(weight) * StdResid
+      )
+  }
 
   if (any(!is.finite(resid_df$NLLPoint))) {
     return(list(
       objective = Inf,
       breakdown_nll = NULL,
       breakdown_ssr = NULL,
-      residuals = resid_df
+      residuals = if (objective_only) NULL else resid_df
+    ))
+  }
+
+  if (isTRUE(objective_only)) {
+    return(list(
+      objective = sum(resid_df$NLLPoint * resid_df$weight),
+      breakdown_nll = NULL,
+      breakdown_ssr = NULL,
+      residuals = NULL
     ))
   }
 

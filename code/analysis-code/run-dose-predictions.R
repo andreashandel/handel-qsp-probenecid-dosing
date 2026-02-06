@@ -38,7 +38,7 @@ source(here::here("code", "analysis-code", "functions", "dose-predictions-functi
 # -----------------------------------------------------------------------------
 # User settings
 # -----------------------------------------------------------------------------
-model_choice <- "model1" # "model1" or "model2"
+model_choice <- "model2" # "model1" or "model2"
 
 # Use the standardized bestfit-sample output (first element is base fit).
 bestfit_file <- here::here("results", "output", paste0(model_choice, "-bestfit-sample.Rds"))
@@ -47,7 +47,7 @@ bestfit_file <- here::here("results", "output", paste0(model_choice, "-bestfit-s
 timeseries_doses <- c(0, 1, 10, 1e2, 1e3, 1e4)
 
 # Parallel workers.
-workers <- NULL
+workers <- 30
 
 # ODE solver settings.
 solvertype <- "vode"

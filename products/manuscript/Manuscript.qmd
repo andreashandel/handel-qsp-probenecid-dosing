@@ -186,7 +186,7 @@ $$
 \textrm{Uninfected cells:} \quad \dot U & = -bUV \\
 \textrm{Infected cells:} \quad \dot I & = bUV - c_I I - k IA\\
 \textrm{Virus:} \quad \dot V & = (1 - f_V)\frac{p}{ (1 + k_F F)}I - c_V V \\
-\textrm{Innate response:} \quad \dot F & = (1 - f_F)\frac{g_F V}{V+h_V} (F_{max}-F) - c_F F \\
+\textrm{Innate response:} \quad \dot F & = (1 - f_F)\frac{g_F V_l}{V_l + h_V} (F_{max}-F) - c_F F \\
 \textrm{Adaptive response:} \quad \dot A & = \frac{F}{F+h_F} + g_A A \\ 
 \textrm{Symptoms:} \quad \dot S & = g_S F - c_S S \\ 
 \end{aligned}
@@ -200,9 +200,9 @@ $$
 \textrm{Latently infected cells:} \quad \dot E & = bUV - c_E E\\
 \textrm{Productviely infected cells:} \quad \dot I & = c_E E - k IA\\
 \textrm{Virus:} \quad \dot V & = (1 - f_V)\frac{p}{ (1 + k_F F)}I - c_V V \\
-\textrm{Innate response:} \quad \dot F & = (1 - f_F)\frac{g_F V}{V+h_V} (F_{max}-F) - c_F F \\
-\textrm{Adaptive response:} \quad \dot A & = \frac{F \log(V)}{F \log(V) + h_F} + g_A A \\ 
-\textrm{Symptoms:} \quad \dot S & = g_S F \log(V) - c_S S \\ 
+\textrm{Innate response:} \quad \dot F & = (1 - f_F)\frac{g_F V_l}{V_l + h_V} (F_{max}-F) - c_F F \\
+\textrm{Adaptive response:} \quad \dot A & = \frac{F V_l}{F V_l + h_F} + g_A A \\ 
+\textrm{Symptoms:} \quad \dot S & = g_S F V_l  - c_S S \\ 
 \end{aligned}
 $$ {#eq-qsp2}
 
@@ -212,7 +212,7 @@ $$ {#eq-qsp2}
 
 ```{r}
 #| label: fig-model
-#| fig-cap: "Schematic of the QSP model. Uninfected cells, $U$, can become infected by virus at rate $b$. Infected cells, $I$, produce virus, $V$, at a maximum rate $p$, are cleared by the adaptive immune response, $A$, (e.g., CD8 T-cells) at rate $k_A$ and die due to other mechanisms at rate $c_I$. Virus production is reduced by the antiviral effect of probenecid ($f_V$) and the antiviral activity of the innate response, F, with the strength of the latter mechanism controlled by parameter $k_F$. Virus is cleared at rate $c_V$ by various unmodeled mechanisms (e.g., degradation, mucosal clearance). The innate immune response (here envisioned to be IL-6 based on the data) is induced by the presence of virus, the induction is modeled with a Hill function with maximum induction rate $g_F$ and the half-maximum induction rate controlled by parameter $h_V$. The drug can reduce the induction of the innate immune response, controlled by the PD parameter $f_F$. Innate induction is capped at a maximum determined by $F_{max}$. The innate immune response decays at rate $c_F$. The adaptive immune response (here envisioned to be mainly CD8 T-cells, but kept generic) is induced by the combination of virus and innate immune strength, with parameter $h_F$ controlling the rate of induction. After induction/activation, the adaptive response grows exponentially at rate $g_A$. Since we only model an acute infection, we do not consider dynamics beyond the peak of the adaptive response, and thus ignore any possible decline. Symptoms, S, are modeled as being induced by the innate response at rate $g_S$, with a rate of decline $c_S$."
+#| fig-cap: "Schematic of the QSP model. Uninfected cells, $U$, can become infected by virus at rate $b$. Infected cells, $I$, produce virus, $V$, at a maximum rate $p$, are cleared by the adaptive immune response, $A$, (e.g., CD8 T-cells) at rate $k_A$ and die due to other mechanisms at rate $c_I$. Virus production is reduced by the antiviral effect of probenecid ($f_V$) and the antiviral activity of the innate response, F, with the strength of the latter mechanism controlled by parameter $k_F$. Virus is cleared at rate $c_V$ by various unmodeled mechanisms (e.g., degradation, mucosal clearance). The innate immune response (here envisioned to be IL-6 based on the data) is induced by the presence of virus on the log scale, V_l (which we numerically define as V_l=\log_{10}(V+1) to avoid negative values). The induction is modeled with a Hill function with maximum induction rate $g_F$ and the half-maximum induction rate controlled by parameter $h_V$. The drug can reduce the induction of the innate immune response, controlled by the PD parameter $f_F$. Innate induction is capped at a maximum determined by $F_{max}$. The innate immune response decays at rate $c_F$. The adaptive immune response (here envisioned to be mainly CD8 T-cells, but kept generic) is induced by the combination of virus and innate immune strength, with parameter $h_F$ controlling the rate of induction. After induction/activation, the adaptive response grows exponentially at rate $g_A$. Since we only model an acute infection, we do not consider dynamics beyond the peak of the adaptive response, and thus ignore any possible decline. Symptoms, S, are modeled as being induced by the innate response at rate $g_S$, with a rate of decline $c_S$."
 #| echo: FALSE
 knitr::include_graphics(here("assets", "model-diagram.png"))
 ```
@@ -240,7 +240,7 @@ $$
 \textrm{NLL}_{j,k} = 0.5 \sum_{i} \left( \log(\sigma_j^2) + \left( \frac{  D_{i,j,k} - M_{i,j,k} }{ \sigma_j }\right)^2 \right)
 $$
 
-The terms $\sigma_j^2$ are the variances for each variable, which are assumed to be the same across treatment conditions. $D_{i,j,k}$ is the data, i.e. the measured value $i$ of variable $j$ in treatment condition $k$, and $M_{i,j,k}$ are the model predictions. 
+The terms $\sigma_j^2$ are the variances for each variable, which are assumed to be the same across treatment conditions and fixed based on the variance in the data for each variable. $D_{i,j,k}$ is the data, i.e. the measured value $i$ of variable $j$ in treatment condition $k$, and $M_{i,j,k}$ are the model predictions. 
 
 To explore uncertainty in the estimates for the fixed parameters, latin hypercube sampling was used to generate 100 samples for all fixed parameters sampled uniformly with lower and upper ranges half and twice the baseline value. The only parameter that was not sampled based on strong prior evidence was $E_{max,V}$. For each sample of the fixed parameters, the model was refit and then used to produce the dose-response predictions shown in the results. 
 
@@ -265,7 +265,7 @@ The model was fit to data for viral load, weight loss (used as a proxy for morbi
 #| label: fig-bestfit
 #| fig-cap: "Best fit of model to the data. Circles, triangles and squares show data for the measured quantities (virus load, innate immunity/IL-6, symptoms/weight loss) for untreated, 10mg and 100mg doses, respectively. Solid, dashed and dotted lines show the best fit of the model for the untreated, 10mg and 100mg doses, respectively. "
 #| echo: FALSE
-knitr::include_graphics(here("results", "figures", "bestfit1.png"))
+knitr::include_graphics(here("results", "figures", "model1-bestfit1.png"))
 ```
 
 
@@ -284,7 +284,7 @@ Subsequently, the calibrated model we used to explore the impact of varying prob
 knitr::include_graphics(here(
   "results",
   "figures",
-  "dose-response-baseline.png"
+  "model1-dose-response-baseline.png"
 ))
 ```
 
@@ -308,7 +308,7 @@ Early treatment enhances the impact of antivirals against acute infections, such
 #| label: fig-dosepred2
 #| fig-cap: "Outcomes for different treatment start times. Compared with a treatment start on day 1 (baseline), the model predicts that later treatments lead to less reduction in virus load, innate immune responses and symptoms. Figures with the time-series of all variables for several dose levels for both day 2 and day 3 treatment start are shown in the supplement."
 #| echo: FALSE
-knitr::include_graphics(here("results", "figures", "dose-response-txstart.png"))
+knitr::include_graphics(here("results", "figures", "model1-dose-response-txstart.png"))
 ```
 
 
@@ -329,7 +329,7 @@ As expected, @fig-dosepred3 illustrates that less frequent dosing requires highe
 knitr::include_graphics(here(
   "results",
   "figures",
-  "dose-response-txinterval.png"
+  "model1-dose-response-txinterval.png"
 ))
 ```
 
