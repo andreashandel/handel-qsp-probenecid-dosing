@@ -55,13 +55,13 @@ source(here::here("code", "analysis-code", "functions", "fit-single-function.R")
 model_choice <- "model1" # "model1" or "model2".
 
 # If FALSE, only the multistart stage is run (no fixed-parameter sampling).
-run_sampling_stage <- FALSE
+run_sampling_stage <- TRUE
 
 # Parallel workers for all stages.
 #   - NULL = let each stage choose a sensible default based on available cores.
 #   - Any positive integer will cap workers in both stages.
 #n_workers <- NULL
-n_workers <- 10
+n_workers <- 20
 
 # Out-of-bounds handling for initial parameter values (both stages).
 # Options:
@@ -71,6 +71,11 @@ oob_action <- "clamp"
 
 # Sigma settings (keep fixed by default)
 sigma_to_fit <- character(0)
+
+# Objective weighting mode.
+#   - "per_block": weight each Scenario×Quantity block by 1/n (legacy default).
+#   - "equal_quantity": each Quantity contributes equal total weight.
+weight_mode <- "equal_quantity"
 
 # Optional ad-hoc fixed parameters (removed from fit vector)
 #user_fixed_params <- c(Emax_F = 1)
@@ -83,6 +88,29 @@ solver_settings <- list(
   tfinal = 7,
   dt = 0.1
 )
+
+# -----------------------------------------------------------------------------
+# Bestfit output helper (strip to downstream-required fields)
+# -----------------------------------------------------------------------------
+strip_bestfit <- function(bestfit) {
+  required <- c(
+    "fitpars",
+    "fitparnames",
+    "fixedpars",
+    "Y0",
+    "fitdata",
+    "parlabels",
+    "objective"
+  )
+
+  stripped <- bestfit[intersect(required, names(bestfit))]
+  missing <- setdiff(required, names(stripped))
+  if (length(missing)) {
+    stop("Bestfit missing required fields: ", paste(missing, collapse = ", "))
+  }
+
+  stripped
+}
 
 # -----------------------------------------------------------------------------
 # Parallel plan helpers (clean setup/teardown per stage)
@@ -111,13 +139,14 @@ teardown_parallel_plan <- function(stage_label) {
 # NOTE: We only save bestfit-multistart and bestfit-sample files.
 
 # Number of random starts for global exploration.
-n_starts <- 100
+n_starts <- 200
 
 # Stage 1 screening settings (fast local search or single evaluation).
 #   - stage1_maxeval = 1 means "evaluate objective once at the start point".
 #   - stage1_maxeval > 1 runs a very short local search to de-noise poor starts.
-stage1_algorithm <- "NLOPT_LN_COBYLA"
+#stage1_algorithm <- "NLOPT_LN_COBYLA"
 #stage1_algorithm <- "NLOPT_LN_NELDERMEAD"
+stage1_algorithm <- "NLOPT_LN_SBPLX"
 stage1_maxeval <- 100
 
 # Candidate filtering after Stage 1 screening.
@@ -130,35 +159,34 @@ stage1_refine_obj_max <- 1e4
 # Prior multistart best fits to include as starting points.
 #   - If a previous multistart file exists, we can reuse its best solutions
 #     as additional candidates for the current run.
-#   - prior_fit_fraction defines the fraction of previous fits to keep
+#   - prior_fit_n defines the number of previous fits to keep (NULL = keep all)
 #     (ordered from best to worst objective).
-prior_fit_fraction <- 1
+prior_fit_n <- 10
 
 # Number of top candidates to refine.
-n_refine <- 30
+n_refine <- 40
 
 # Refinement selection mode for Stage 2.
 #   - "best": choose the top n_refine candidates strictly by Stage 1 objective.
 #   - "random": choose n_refine candidates uniformly at random.
 #   - "mixed": always include the best candidate, then select a mix of the
-#     next-best and random candidates. mix_best_fraction controls how much of
-#     the remaining slots are filled by the next-best candidates.
+#     next-best and random candidates. mix_best_n controls how many of the
+#     remaining slots are filled by the next-best candidates (NULL = all).
 refine_selection_mode <- "mixed" # "best", "random", or "mixed"
-mix_best_fraction <- 0.2
+mix_best_n <- 10
 
 # Stage 2 optimizers.
 #   - Every candidate selected for Stage 2 is refined with EACH algorithm
 #     listed here (cartesian product). This makes results more robust to
 #     optimizer-specific quirks but increases runtime proportionally.
 #   - Useful Options: "NLOPT_LN_COBYLA", "NLOPT_LN_SBPLX",
-#     "NLOPT_LN_NELDERMEAD", "NLOPT_LN_BOBYQA"
+#   Less good:  "NLOPT_LN_NELDERMEAD", "NLOPT_LN_BOBYQA"
 #stage2_algorithms <- c("NLOPT_LN_COBYLA", "NLOPT_LN_BOBYQA")
 stage2_algorithms <- c("NLOPT_LN_COBYLA")
 #stage2_algorithms <- c("NLOPT_LN_SBPLX")
-#stage2_algorithms <- c("NLOPT_LN_BOBYQA")
 
 # Stage 2 optimizer settings.
-stage2_maxeval <- 2000
+stage2_maxeval <- 3000
 
 # Fit in log space for positive parameters (multistart mode).
 #   - TRUE means the optimizer sees log(parameters), which ensures positivity
@@ -173,7 +201,7 @@ seed_value <- 1234
 # User settings (sampling stage: single-fit mode for fixed-parameter samples)
 # -----------------------------------------------------------------------------
 # Number of random fixed-parameter samples. 0 = only baseline fixed parameters.
-nsamp <- 100
+nsamp <- 20
 
 # Force specific fixed parameters to a chosen value across all samples.
 fixed_overrides <- c(Emax_V = 1)
@@ -183,7 +211,7 @@ fixed_overrides <- c(Emax_V = 1)
 #     multistart, but only for the sampling stage.
 #sample_algorithm <- "NLOPT_LN_BOBYQA"
 sample_algorithm <- "NLOPT_LN_COBYLA"
-sample_maxeval <- 2500
+sample_maxeval <- 3000
 sample_ftol_rel <- 1e-10
 sample_logfit <- TRUE
 
@@ -204,6 +232,12 @@ fitdata_bundle <- load_fit_data()
 fitdata <- fitdata_bundle$fitdata
 scenarios <- fitdata_bundle$scenarios
 doses <- fitdata_bundle$doses
+
+# Precompute objective inputs and observation times for efficient fitting.
+objective_data <- prepare_fast_objective_data(fitdata, weight_mode = weight_mode)
+obs_times_by_scenario <- lapply(objective_data$data_by_scenario, function(x) {
+  sort(unique(c(0, x$time)))
+})
 
 config <- build_model_config(model_choice)
 
@@ -309,6 +343,8 @@ par_ini_full <- handle_oob_initials(par_ini_full, lb, ub, "Baseline")
     stop("seed_mode must be either 'fixed' or 'time'.")
   }
 
+  message(sprintf("Starting stage 1 at time %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+
   logfit_in_fit_function <- ifelse(use_log_space, 1, 0)
 
   objective_wrapper <- function(par_vec, solver_settings) {
@@ -328,7 +364,10 @@ par_ini_full <- handle_oob_initials(par_ini_full, lb, ub, "Baseline")
       solvertype = solver_settings$solvertype,
       tols = solver_settings$tols,
       simulatorname = simulatorname,
-      logfit = logfit_in_fit_function
+      logfit = logfit_in_fit_function,
+      obs_times_by_scenario = obs_times_by_scenario,
+      objective_data = objective_data,
+      weight_mode = weight_mode
     )
     if (!is.finite(obj)) {
       return(Inf)
@@ -439,8 +478,7 @@ par_ini_full <- handle_oob_initials(par_ini_full, lb, ub, "Baseline")
       }, numeric(1));
 
       order_idx <- order(objectives);
-      n_keep <- ceiling(length(previous_fits) * prior_fit_fraction);
-      n_keep <- min(n_keep, length(previous_fits));
+      n_keep <- if (is.null(prior_fit_n)) length(previous_fits) else min(prior_fit_n, length(previous_fits));
       if (n_keep > 0) {
         previous_fits <- previous_fits[order_idx[seq_len(n_keep)]];
       } else {
@@ -530,6 +568,7 @@ par_ini_full <- handle_oob_initials(par_ini_full, lb, ub, "Baseline")
   }
 
   teardown_parallel_plan("Stage 1")
+  message(sprintf("Ending stage 1 at time %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
 
   # Apply the Stage 1 cutoff rule:
   #   - keep candidates with finite objectives
@@ -560,10 +599,9 @@ par_ini_full <- handle_oob_initials(par_ini_full, lb, ub, "Baseline")
       keep_idx <- c(best_idx, random_idx)
     } else if (refine_selection_mode == "mixed") {
       # Mixed mode: take some top-ranked and some random candidates.
-      # mix_best_fraction controls the fraction of slots assigned to top-ranked
-      # candidates; the remainder are random to preserve diversity.
-      n_best <- max(1, floor(slots_remaining * mix_best_fraction))
-      n_best <- min(n_best, slots_remaining)
+      # mix_best_n controls how many slots are assigned to top-ranked candidates;
+      # the remainder are random to preserve diversity.
+      n_best <- if (is.null(mix_best_n)) slots_remaining else min(max(mix_best_n, 0), slots_remaining)
       n_rand <- slots_remaining - n_best
       best_part <- remaining_idx[seq_len(n_best)]
       remaining_pool <- setdiff(remaining_idx, best_part)
@@ -628,6 +666,7 @@ par_ini_full <- handle_oob_initials(par_ini_full, lb, ub, "Baseline")
     )
   )
 
+  message(sprintf("Starting stage 2 at time %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
   workers_refine <- if (is.null(n_workers)) {
     max(1, future::availableCores() - 1)
   } else {
@@ -667,6 +706,7 @@ par_ini_full <- handle_oob_initials(par_ini_full, lb, ub, "Baseline")
   )
 
   teardown_parallel_plan("Stage 2")
+  message(sprintf("Ending stage 2 at time %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
 
   best_objectives <- vapply(bestfits, function(x) x$objective, numeric(1))
   best_idx <- which.min(best_objectives)
@@ -685,7 +725,8 @@ par_ini_full <- handle_oob_initials(par_ini_full, lb, ub, "Baseline")
     paste0(model_choice, "-bestfit-multistart.Rds")
   )
 
-  saveRDS(bestfits, output_file)
+  bestfits_to_save <- lapply(bestfits, strip_bestfit)
+  saveRDS(bestfits_to_save, output_file)
   message("Saved all refined fits to: ", output_file)
 }
 
@@ -693,6 +734,7 @@ par_ini_full <- handle_oob_initials(par_ini_full, lb, ub, "Baseline")
 # Optional sampling stage (single-fit workflow for fixed-parameter samples)
 # -----------------------------------------------------------------------------
 if (isTRUE(run_sampling_stage)) {
+  message(sprintf("Starting stage 3 at time %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
   # Build the list of fixed-parameter sets to evaluate.
   #   - The first element is always the baseline fixed-parameter set.
   #   - The remaining nsamp elements are random perturbations around baseline.
@@ -765,6 +807,9 @@ if (isTRUE(run_sampling_stage)) {
       solvertype = solver_settings$solvertype,
       tfinal = solver_settings$tfinal,
       dt = solver_settings$dt,
+      obs_times_by_scenario = obs_times_by_scenario,
+      objective_data = objective_data,
+      weight_mode = weight_mode,
       parlabels = parlabels,
       print_level = print_level,
       oob_action = oob_action,
@@ -794,6 +839,8 @@ if (isTRUE(run_sampling_stage)) {
     bestfit_all[[1]] <- fit_one_sample(1, print_level = sample_print_level)
   }
 
+  bestfit_all <- lapply(bestfit_all, strip_bestfit)
+
   end_time_cpu <- proc.time() - start_time_cpu
   runtime_minutes <- end_time_cpu[[3]] / 60
   cat("sampling stage fit took this many minutes:", runtime_minutes, "\n")
@@ -821,6 +868,7 @@ if (isTRUE(run_sampling_stage)) {
   saveRDS(bestfit_all, sample_bestfit_path)
 
   message("Saved sample bestfit list to: ", sample_bestfit_path)
+  message(sprintf("Ending stage 3 at time %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
 } else {
   message("Sampling stage disabled; only multistart fit was run.")
 }

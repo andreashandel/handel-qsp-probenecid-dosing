@@ -28,12 +28,14 @@ source(here::here("code", "analysis-code", "functions", "virus-transform-functio
 #'
 #' @param data_path Optional path to the processed data CSV. When NULL, uses the
 #'   project default at data/processed-data/processeddata.csv.
+#' @param time_round Decimal places to round Day/time for stable joins and
+#'   consistent simulator output matching.
 #' @return A list with:
 #'   - fitdata: standardized data.frame
 #'   - scenarios: ordered Scenario levels
 #'   - doses: numeric doses in ascending order
 #'
-load_fit_data <- function(data_path = NULL) {
+load_fit_data <- function(data_path = NULL, time_round = 8) {
   # If no path is provided, fall back to the canonical processed CSV.
   if (is.null(data_path)) {
     data_path <- here::here("data", "processed-data", "processeddata.csv")
@@ -42,6 +44,10 @@ load_fit_data <- function(data_path = NULL) {
   # Read the CSV as a plain data.frame; we control factors explicitly below.
   fitdata <- read.csv(data_path, stringsAsFactors = FALSE)
 
+  # Round observation times once to avoid repeated rounding in hot paths.
+  if (is.numeric(fitdata$Day)) {
+    fitdata$Day <- round(fitdata$Day, time_round)
+  }
 
   # Explicit factor level ordering guarantees consistent plotting and fitting.
   scenario_levels <- c("NoTreatment", "PanCytoVir10mg", "PanCytoVir100mg")

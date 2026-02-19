@@ -14,6 +14,103 @@ library(here)
 # Centralized virus transform helpers.
 source(here::here("code", "analysis-code", "functions", "virus-transform-function.R"))
 
+#' Prepare fast objective data structures for fitting.
+#'
+#' This precomputes per-scenario observation vectors and weights so the
+#' optimizer can evaluate objectives without repeated joins or factor handling.
+#'
+#' @param fitdata Standardized fitdata with columns Scenario, Quantity, Day, Value.
+#' @param time_round Decimal places to round Day/time once at setup.
+#' @param min_variance Minimum variance to avoid log(0) or divide-by-zero.
+#' @param weight_mode Weighting scheme for observations. Options:
+#'   - "per_block": weight each Scenario×Quantity block by 1/n (current default).
+#'   - "equal_quantity": each Quantity contributes equal total weight.
+#' @return A list with:
+#'   - data_by_scenario: named list of per-scenario vectors (time, quantity_id, value, weight)
+#'   - scenario_levels: scenario ordering used during fit
+#'   - quantity_levels: quantity ordering used during fit
+#'   - quantity_id_map: named integer map from quantity name to id
+#'   - min_variance: variance floor used in objective evaluation
+#'
+prepare_fast_objective_data <- function(
+  fitdata,
+  time_round = 8,
+  min_variance = 1e-12,
+  weight_mode = "per_block"
+) {
+  required_cols <- c("Scenario", "Quantity", "Day", "Value")
+  missing_cols <- setdiff(required_cols, names(fitdata))
+  if (length(missing_cols)) {
+    stop("fitdata is missing required columns: ", paste(missing_cols, collapse = ", "))
+  }
+
+  if (is.numeric(fitdata$Day)) {
+    fitdata$Day <- round(fitdata$Day, time_round)
+  }
+
+  if (!weight_mode %in% c("per_block", "equal_quantity")) {
+    stop("weight_mode must be 'per_block' or 'equal_quantity'.")
+  }
+
+  scenario_levels <- if (is.factor(fitdata$Scenario)) {
+    levels(fitdata$Scenario)
+  } else {
+    sort(unique(fitdata$Scenario))
+  }
+  quantity_levels <- if (is.factor(fitdata$Quantity)) {
+    levels(fitdata$Quantity)
+  } else {
+    sort(unique(fitdata$Quantity))
+  }
+
+  quantity_id_map <- setNames(seq_along(quantity_levels), quantity_levels)
+  quantity_id <- as.integer(quantity_id_map[as.character(fitdata$Quantity)])
+  if (any(is.na(quantity_id))) {
+    stop("fitdata has Quantity values without a known id mapping.")
+  }
+
+  if (weight_mode == "per_block") {
+    weight_tbl <- fitdata %>%
+      count(Scenario, Quantity, name = "n") %>%
+      mutate(weight = 1 / n)
+    fitdata_weighted <- fitdata %>%
+      left_join(weight_tbl, by = c("Scenario", "Quantity"))
+  } else {
+    weight_tbl <- fitdata %>%
+      count(Quantity, name = "n") %>%
+      mutate(weight = 1 / n)
+    fitdata_weighted <- fitdata %>%
+      left_join(weight_tbl, by = "Quantity")
+  }
+
+  if (any(is.na(fitdata_weighted$weight))) {
+    stop("Failed to assign weights for some fitdata rows.")
+  }
+
+  row_idx <- split(seq_len(nrow(fitdata_weighted)), fitdata_weighted$Scenario)
+  data_by_scenario <- lapply(row_idx, function(idx) {
+    if (!length(idx)) {
+      return(NULL)
+    }
+    list(
+      time = fitdata_weighted$Day[idx],
+      quantity_id = quantity_id[idx],
+      value = fitdata_weighted$Value[idx],
+      weight = fitdata_weighted$weight[idx]
+    )
+  })
+  data_by_scenario <- Filter(Negate(is.null), data_by_scenario)
+
+  list(
+    data_by_scenario = data_by_scenario,
+    scenario_levels = scenario_levels,
+    quantity_levels = quantity_levels,
+    quantity_id_map = quantity_id_map,
+    min_variance = min_variance,
+    weight_mode = weight_mode
+  )
+}
+
 #' Build a long-format prediction table from simulator output.
 #'
 #' @param sim_df Simulator output with columns time, V, F, S and a scenario column.
@@ -78,6 +175,9 @@ collect_sigma_pool <- function(params, fixedpars) {
 #' @param sigma_pool Named vector of sigma parameters (additive + proportional).
 #' @param min_variance Minimum variance to avoid log(0) or divide-by-zero.
 #' @param time_round Decimal places to round Day/time for safe joins.
+#' @param weight_mode Weighting scheme for observations. Options:
+#'   - "per_block": weight each Scenario×Quantity block by 1/n (current default).
+#'   - "equal_quantity": each Quantity contributes equal total weight.
 #' @param objective_only If TRUE, return only the scalar objective (skip
 #'   residuals and breakdown tables) to reduce memory use during fitting.
 #' @return List with:
@@ -92,6 +192,7 @@ compute_objective_components <- function(
   sigma_pool,
   min_variance = 1e-12,
   time_round = 8,
+  weight_mode = "per_block",
   objective_only = FALSE
 ) {
   # Validate required columns.
@@ -136,6 +237,10 @@ compute_objective_components <- function(
   }
   if (is.numeric(pred_long$Day)) {
     pred_long <- pred_long %>% mutate(Day = round(Day, time_round))
+  }
+
+  if (!weight_mode %in% c("per_block", "equal_quantity")) {
+    stop("weight_mode must be 'per_block' or 'equal_quantity'.")
   }
 
   data_joined <- fitdata %>%
@@ -196,13 +301,25 @@ compute_objective_components <- function(
       mutate(Quantity = factor(Quantity, levels = quantity_levels))
   }
 
-  weight_tbl <- fitdata %>%
-    count(Quantity, Scenario, name = "n") %>%
-    mutate(weight = 1 / n)
+  if (weight_mode == "per_block") {
+    weight_tbl <- fitdata %>%
+      count(Quantity, Scenario, name = "n") %>%
+      mutate(weight = 1 / n)
+  } else {
+    weight_tbl <- fitdata %>%
+      count(Quantity, name = "n") %>%
+      mutate(weight = 1 / n)
+  }
 
   resid_df <- data_joined %>%
     left_join(sigma_tbl, by = "Quantity") %>%
-    left_join(weight_tbl, by = c("Quantity", "Scenario"))
+    {
+      if (weight_mode == "per_block") {
+        left_join(., weight_tbl, by = c("Quantity", "Scenario"))
+      } else {
+        left_join(., weight_tbl, by = "Quantity")
+      }
+    }
 
   if (isTRUE(objective_only)) {
     resid_df <- resid_df %>%

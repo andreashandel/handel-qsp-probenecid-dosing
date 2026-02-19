@@ -32,7 +32,7 @@ build_model_config <- function(model_choice) {
 
   # Base parameter values and bounds (shared across models)
   par_ini_full <- c(
-    b = 1e-8,
+    b = 1e-6,
     k = 1e-5,
     p = 1e4,
     kF = 0.1,
@@ -49,7 +49,7 @@ build_model_config <- function(model_choice) {
   )
 
   lb <- c(
-    b = 1e-12,
+    b = 1e-14,
     k = 1e-10,
     p = 1,
     kF = 1e-1,
@@ -59,17 +59,17 @@ build_model_config <- function(model_choice) {
     Fmax = 0.1,
     hF = 1e-5,
     gS = 1e-3,
-    cS = 1e-3,
-    Emax_F = 1e-3,
-    C50_F = 1e-10,
-    C50_V = 1e-12
+    cS = 1e-5,
+    Emax_F = 1e-5,
+    C50_F = 1e-17,
+    C50_V = 1e-17
   )
 
   ub <- c(
-    b = 1e-5,
+    b = 1e-1,
     k = 1,
-    p = 1e7,
-    kF = 1e2,
+    p = 1e10,
+    kF = 1e5,
     cV = 1e5,
     gF = 1e3,
     hV = 1e5,
@@ -78,8 +78,8 @@ build_model_config <- function(model_choice) {
     gS = 1e3,
     cS = 1e3,
     Emax_F = 1,
-    C50_F = 1e-2,
-    C50_V = 1e-2
+    C50_F = 1e2,
+    C50_V = 1e2
   )
 
   # Descriptive labels used in tables/plots.

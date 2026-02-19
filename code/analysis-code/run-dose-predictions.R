@@ -38,21 +38,38 @@ source(here::here("code", "analysis-code", "functions", "dose-predictions-functi
 # -----------------------------------------------------------------------------
 # User settings
 # -----------------------------------------------------------------------------
-model_choice <- "model2" # "model1" or "model2"
+model_choice <- "model1" # "model1" or "model2"
 
 # Use the standardized bestfit-sample output (first element is base fit).
 bestfit_file <- here::here("results", "output", paste0(model_choice, "-bestfit-sample.Rds"))
 
+#x <- readRDS(here::here("results", "output", paste0(model_choice, "-bestfit-multistart.Rds")))
+
+#Remove fixed parameters from the app UI. And make sure that the app treats parameters on the right scale. There is no reason to ever do a log transform of the parameters for the app, so keep all on a linear scale and make sure the functions which are called also treat the model parameters on the linear scale. The objective value is still not aligned. The value reported in the UI right now is 9.38717e+01 while the 
+
 # Doses for which full time-series trajectories are retained.
 timeseries_doses <- c(0, 1, 10, 1e2, 1e3, 1e4)
 
+# All doses to simulate (must include timeseries_doses).
+dose_grid <- 10^seq(-2, 4, length = 50)
+all_doses <- sort(unique(c(timeseries_doses, dose_grid)))
+
+# Dosing schedules.
+schedule_defs <- list(
+  s1 = list(txstart = 1, txend = 3.9, txinterval = 0.5, name = "s1", label = "baseline"),
+  s2 = list(txstart = 2, txend = 4.9, txinterval = 0.5, name = "s2", label = "d2 start"),
+  s3 = list(txstart = 3, txend = 5.9, txinterval = 0.5, name = "s3", label = "d3 start"),
+  s4 = list(txstart = 1, txend = 3.9, txinterval = 1, name = "s4", label = "daily tx"),
+  s5 = list(txstart = 1, txend = 1, txinterval = 1, name = "s5", label = "single tx")
+)
+
 # Parallel workers.
-workers <- 30
+workers <- 25
 
 # ODE solver settings.
 solvertype <- "vode"
-tols <- 1e-12
-dt <- 0.01
+tols <- 1e-10
+dt <- 0.02
 tfinal <- 7
 
 # -----------------------------------------------------------------------------
@@ -91,6 +108,8 @@ if (nsamp > 1) {
       simulate_dose_predictions(
         bestfit,
         ts_doses = timeseries_doses,
+        all_doses = all_doses,
+        schedule_defs = schedule_defs,
         solvertype = solvertype,
         tols = tols,
         dt = dt,
@@ -107,6 +126,8 @@ if (nsamp > 1) {
   simres_list[[1]] <- simulate_dose_predictions(
     bestfit_list[[1]],
     ts_doses = timeseries_doses,
+    all_doses = all_doses,
+    schedule_defs = schedule_defs,
     solvertype = solvertype,
     tols = tols,
     dt = dt,

@@ -101,7 +101,7 @@ In the present study, a quantitative systems pharmacology (QSP) model was develo
 
 ## Data
 
-Data came from a recently published study on H5N1 influenza infections in mice [@murray2024]. In brief, female BALB/c mice were infected with 3 LD50 of H5N1 influenza virus. Animals either received no treatment or were given probenecid at a dosage of 10mg/kg or 100mg/kg (with an average mouse weight of 20g) twice daily by gavage, starting on day 1 post infection and continuing for 3 days. Viral loads, cytokine levels, and weight loss were measured on various days post infection. The data used includes viral load, body weight (as a measure of symptoms), and innate immune response (specifically, IL-6). For more details on the data, please refer to the original publication.
+Data came from a recently published study on H5N1 influenza infections in mice [@murray2024]. In brief, female BALB/c mice were infected with 3 LD50 of H5N1 influenza virus. Animals either received no treatment or were given probenecid at a dosage of 10mg/kg or 100mg/kg (with an average mouse weight of 20g) twice daily by gavage for 3 days, starting on day 1 post infection. Viral loads, cytokine levels, and weight loss were measured on various days post infection. The data used includes viral load, body weight (as a measure of symptoms), and innate immune response (specifically, IL-6). For more details on the data, please refer to the original publication.
 
 ## Model
 
@@ -172,21 +172,22 @@ The maximum antiviral or anti-inflammatory effect of the drug is denoted by $E_{
 
 ### QSP component
 
-Since any within-host mechanistic model of influenza infection will need to include simplifications and abstractions of the detailed and complex processes surrounding interactions between virus, host cells, and the immune response, we decided to implement two alternative model structures. This allows some assessment of the robustness of our findings to model structure.
+Since any within-host mechanistic model of influenza infection will need to include simplifications and abstractions of the detailed and complex processes surrounding interactions between virus, host cells, and the immune response, we decided to implement two alternative model structures. This allows some assessment of the dependence of results on model details.
 
-Both models contain the same main compoments, namely uninfected cells and infected cells, virus, the innate immune response, the adaptive immune response, and symptoms/morbidity. The models follow similar ones previously used by us and others to describe the dynamics of influenza infections [@handel2010; @handel2018; @canini14a; @dobrovolny13; @handel2018b; @beauchemin11; @kamal15].
+Both models contain the same main compoments, namely uninfected cells and infected cells, virus, the innate immune response, the adaptive immune response, and symptoms/morbidity. 
 
-The differences between the models are that model 2 includes a latent/ecclipse phase for infected cells and assumes that adaptive response and symptom induction rates are dependend on both innate response strength and virus load, versus just innate response in model 1.
+The differences between the models are that model 2 includes a latent/ecclipse phase for infected cells and assumes that induction of innate response, adaptive response and symptoms depend on the log of the virus load. This contrasts to model 1 where virus (on the natural scale) is only assumed to impact innate response induction.
 
+The models follow similar ones previously used by us and others to describe the dynamics of influenza infections [@handel2010; @handel2018; @canini14a; @dobrovolny13; @handel2018b; @beauchemin11; @kamal15].
 
- The first model is illustrated schematically in @fig-model A and given mathematically by the following set of ordinary differential equations:
+ The models are illustrated schematically in @fig-model and given mathematically by the following set of ordinary differential equations:
 
 $$
 \begin{aligned}
 \textrm{Uninfected cells:} \quad \dot U & = -bUV \\
 \textrm{Infected cells:} \quad \dot I & = bUV - c_I I - k IA\\
 \textrm{Virus:} \quad \dot V & = (1 - f_V)\frac{p}{ (1 + k_F F)}I - c_V V \\
-\textrm{Innate response:} \quad \dot F & = (1 - f_F)\frac{g_F V_l}{V_l + h_V} (F_{max}-F) - c_F F \\
+\textrm{Innate response:} \quad \dot F & = (1 - f_F)\frac{g_F V}{V + h_V} (F_{max}-F) - c_F F \\
 \textrm{Adaptive response:} \quad \dot A & = \frac{F}{F+h_F} + g_A A \\ 
 \textrm{Symptoms:} \quad \dot S & = g_S F - c_S S \\ 
 \end{aligned}
@@ -198,7 +199,7 @@ $$
 \begin{aligned}
 \textrm{Uninfected cells:} \quad \dot U & = -bUV \\
 \textrm{Latently infected cells:} \quad \dot E & = bUV - c_E E\\
-\textrm{Productviely infected cells:} \quad \dot I & = c_E E - k IA\\
+\textrm{Productviely infected cells:} \quad \dot I & = c_E E - c_I I - k IA\\
 \textrm{Virus:} \quad \dot V & = (1 - f_V)\frac{p}{ (1 + k_F F)}I - c_V V \\
 \textrm{Innate response:} \quad \dot F & = (1 - f_F)\frac{g_F V_l}{V_l + h_V} (F_{max}-F) - c_F F \\
 \textrm{Adaptive response:} \quad \dot A & = \frac{F V_l}{F V_l + h_F} + g_A A \\ 
@@ -212,11 +213,10 @@ $$ {#eq-qsp2}
 
 ```{r}
 #| label: fig-model
-#| fig-cap: "Schematic of the QSP model. Uninfected cells, $U$, can become infected by virus at rate $b$. Infected cells, $I$, produce virus, $V$, at a maximum rate $p$, are cleared by the adaptive immune response, $A$, (e.g., CD8 T-cells) at rate $k_A$ and die due to other mechanisms at rate $c_I$. Virus production is reduced by the antiviral effect of probenecid ($f_V$) and the antiviral activity of the innate response, F, with the strength of the latter mechanism controlled by parameter $k_F$. Virus is cleared at rate $c_V$ by various unmodeled mechanisms (e.g., degradation, mucosal clearance). The innate immune response (here envisioned to be IL-6 based on the data) is induced by the presence of virus on the log scale, V_l (which we numerically define as V_l=\log_{10}(V+1) to avoid negative values). The induction is modeled with a Hill function with maximum induction rate $g_F$ and the half-maximum induction rate controlled by parameter $h_V$. The drug can reduce the induction of the innate immune response, controlled by the PD parameter $f_F$. Innate induction is capped at a maximum determined by $F_{max}$. The innate immune response decays at rate $c_F$. The adaptive immune response (here envisioned to be mainly CD8 T-cells, but kept generic) is induced by the combination of virus and innate immune strength, with parameter $h_F$ controlling the rate of induction. After induction/activation, the adaptive response grows exponentially at rate $g_A$. Since we only model an acute infection, we do not consider dynamics beyond the peak of the adaptive response, and thus ignore any possible decline. Symptoms, S, are modeled as being induced by the innate response at rate $g_S$, with a rate of decline $c_S$."
-#| echo: FALSE
+#| fig-cap: "Schematic of the QSP model. Uninfected cells, $U$, can become infected by virus at rate $b$. Infected cells, $I$, produce virus, $V$, at a maximum rate $p$, are cleared by the adaptive immune response, $A$, (e.g., CD8 T-cells) at rate $k_A$ and die due to other mechanisms at rate $c_I$. Virus production is reduced by the antiviral effect of probenecid ($f_V$) and the antiviral activity of the innate response, F, with the strength of the latter mechanism controlled by parameter $k_F$. Virus is cleared at rate $c_V$ by various unmodeled mechanisms (e.g., degradation, mucosal clearance). The innate immune response (here envisioned to be IL-6 based on the data) is induced by the presence of virus on the log scale, $V_l$ (which we numerically define as $V_l=log_{10}(V+1)$ to avoid negative values). The induction is modeled with a Hill function with maximum induction rate $g_F$ and the half-maximum induction rate controlled by parameter $h_V$. The drug can reduce the induction of the innate immune response, controlled by the PD parameter $f_F$. Innate induction is capped at a maximum determined by $F_{max}$. The innate immune response decays at rate $c_F$. The adaptive immune response (here envisioned to be mainly CD8 T-cells, but kept generic) is induced by the combination of virus and innate immune strength, with parameter $h_F$ controlling the rate of induction. After induction/activation, the adaptive response grows exponentially at rate $g_A$. Since we only model an acute infection, we do not consider dynamics beyond the peak of the adaptive response, and thus ignore any possible decline. Symptoms, $S$, are modeled as being induced by the innate response at rate $g_S$, with a rate of decline $c_S$."
+# #| echo: FALSE
 knitr::include_graphics(here("assets", "model-diagram.png"))
 ```
-
 
 
 
@@ -224,23 +224,26 @@ knitr::include_graphics(here("assets", "model-diagram.png"))
 
 Some of the PK and PD parameters were fixed as described above. To further reduce overfitting, additional prior information from previously published studies was used to fix selected parameters of the QSP model. Specifically, $c_F = 1$/day was set based on the reported decay rate of IL-6 [@kuribayashi2018], the T-cell growth rate was fixed at $g_A = 3$/day [@lewis2021], the duration of the latent phase for infected cells was set to 6 hours ($c_E = 4$/day$) [@beauchemin11], and the clearance rate of infected cells was set to $c_I = 1$/day [@smith11].
 
-To estimate the remaining parameters, the model predictions for log viral load, innate response, and symptoms were fit to the data for log virus load, IL6 and percent weight loss from the H5N1 mouse study. Since most measurements involved destructive sampling (one mouse per timepoint), and identifiers for specific animals were not recorded, individual level information is unavailable, which precludes hierarchical modeling approaches that make use of individual-level time-series measurements. Instead, a maximum likelihood approach was used to fit the model to the data. The model was simultaneously fit to all three variables across the three treatment conditions (untreated, 10 mg, 100 mg). A normal distribution with additive errors and independent variances for the three fitted quantities was assumed. Since sample size across measured quantities was uneven, and to ensure virus load and IL6 data had comparable impact on the fit, weighting by the inverse sample size for each variable and treatment condition was implemented.
+To estimate the remaining parameters, the model predictions for log viral load ($\log_10(V+1)$), innate response, and symptoms were fit to the data for log virus load, IL6 and percent weight loss from the H5N1 mouse study. Since most measurements involved destructive sampling (one mouse per timepoint), and identifiers for specific animals were not recorded, individual level information is unavailable, which precludes hierarchical modeling approaches that make use of individual-level time-series measurements. Instead, a maximum likelihood approach was used to fit the model to the data. The model was simultaneously fit to all three variables across the three treatment conditions (untreated, 10 mg, 100 mg). A normal distribution with additive errors and independent variances for the three fitted quantities was assumed. Proportional error terms were explored but did not improve results and were thus fixed to zero.
+
+Since sample size across measured quantities was uneven, we weighted each observation by the inverse total sample size for that variable (across all treatment conditions) so that virus load, IL‑6, and weight loss contribute equally to the objective.
+
 
 This resulted in the following objective function being minimized by the fitting routine:
 
 $$
-O = \sum_{j,k} \frac{1}{N_{j,k}}  \textrm{NLL}_{j,k}  
+O = \sum_{j} \frac{1}{N_{j}} \sum_k \textrm{NLL}_{j,k}  
 $$
 
 The indices $j$ and $k$ stand for the 3 different variables (virus load, innate response, symptoms) and the 3 treatment conditions (untreated, 10 mg, 100 mg), respectively.
 
-$N_{j,k}$ is the number of data points for each variable and treatment condition, and $\textrm{NLL}_{j,k}$ is the negative log-likelihood term for each variable, given by
+$N_{j} = \sum_k N_{j,k}$ is the number of data points for each variable $j$ across all treatment conditions, and $\textrm{NLL}_{j,k}$ is the negative log-likelihood term for each variable, given by
 
 $$
 \textrm{NLL}_{j,k} = 0.5 \sum_{i} \left( \log(\sigma_j^2) + \left( \frac{  D_{i,j,k} - M_{i,j,k} }{ \sigma_j }\right)^2 \right)
 $$
 
-The terms $\sigma_j^2$ are the variances for each variable, which are assumed to be the same across treatment conditions and fixed based on the variance in the data for each variable. $D_{i,j,k}$ is the data, i.e. the measured value $i$ of variable $j$ in treatment condition $k$, and $M_{i,j,k}$ are the model predictions. 
+The terms $\sigma_j^2$ are the variances for each variable, which were assumed constant across treatment conditions and fixed from the empirical variance of each variable on its fitting scale. $D_{i,j,k}$ is the data, i.e. the measured value $i$ of variable $j$ in treatment condition $k$, and $M_{i,j,k}$ are the model predictions. 
 
 To explore uncertainty in the estimates for the fixed parameters, latin hypercube sampling was used to generate 100 samples for all fixed parameters sampled uniformly with lower and upper ranges half and twice the baseline value. The only parameter that was not sampled based on strong prior evidence was $E_{max,V}$. For each sample of the fixed parameters, the model was refit and then used to produce the dose-response predictions shown in the results. 
 
@@ -316,8 +319,7 @@ knitr::include_graphics(here("results", "figures", "model1-dose-response-txstart
 
 ## Assessing less frequent dosing regimens
 
-Another important consideration identified through our simulations was the frequency of dosing, as less frequent regimens are generally preferred in clinical practice. The experimental study used twice-daily dosing. We used the model to explore a daily dosing regimen starting at day 1 and lasting until day 4, and a single treatment at day 1.
-As expected, @fig-dosepred3 illustrates that less frequent dosing requires higher doses to achieve similar results compared to more frequent dosing. Reducing the dosing frequency from twice daily to once daily can be compensated for by a moderate increase in dose, while single dosing would require substantially higher doses that might not be therapetically appropriate. 
+Another important consideration identified through our simulations was the frequency of dosing, as less frequent regimens are generally preferred in clinical practice. The experimental study used twice-daily dosing. We used the model to explore a daily dosing regimen, and a single treatment at day 1. As expected, @fig-dosepred3 illustrates that less frequent dosing requires higher doses to achieve similar results compared to more frequent dosing. Reducing the dosing frequency from twice daily to once daily can be compensated for by a moderate increase in dose, while single dosing would require substantially higher doses that might not be therapetically appropriate. 
 
 
 

@@ -19,6 +19,9 @@ source(here::here("code", "analysis-code", "functions", "virus-transform-functio
 #' @param bestfit A single bestfit object (one list element from the fit output).
 #' @param ts_doses Numeric vector of doses for which full time-series should be
 #'   retained (all other doses only contribute summary AUCs).
+#' @param all_doses Numeric vector of ALL doses to simulate (must include ts_doses).
+#' @param schedule_defs List of dosing schedules. Each element should be a list
+#'   with txstart, txend, txinterval, name, and optional label.
 #' @param solvertype ODE solver name (e.g., "lsoda" or "vode").
 #' @param tols Solver tolerance.
 #' @param dt Time step for output.
@@ -29,12 +32,20 @@ source(here::here("code", "analysis-code", "functions", "virus-transform-functio
 simulate_dose_predictions <- function(
   bestfit,
   ts_doses,
+  all_doses,
+  schedule_defs,
   solvertype,
   tols,
   dt,
   tfinal,
   simulatorname
 ) {
+  if (!all(ts_doses %in% all_doses)) {
+    missing_ts <- setdiff(ts_doses, all_doses)
+    stop("all_doses must include all ts_doses. Missing: ", paste(missing_ts, collapse = ", "))
+  }
+  all_doses <- sort(unique(all_doses))
+
   # ---------------------------------------------------------------------------
   # Inner helper: compute percent reduction relative to baseline in each schedule
   # ---------------------------------------------------------------------------
@@ -72,6 +83,7 @@ simulate_dose_predictions <- function(
     tfinal
   ) {
     time_tolerance <- dt / 2
+    output_times <- seq(0, tfinal, by = dt)
     # Store the AUC summaries for each dose in this schedule.
     summary_df <- tibble(
       Dose = all_doses,
@@ -101,7 +113,8 @@ simulate_dose_predictions <- function(
           tfinal = tfinal,
           dt = dt,
           solvertype = solvertype,
-          tols = tols
+          tols = tols,
+          times = output_times
         )
       )
 
@@ -195,9 +208,6 @@ simulate_dose_predictions <- function(
   # ---------------------------------------------------------------------------
   # Prepare model parameters for simulation
   # ---------------------------------------------------------------------------
-  # Simulate on a wide dose grid plus the explicit time-series doses.
-  all_doses <- sort(unique(c(ts_doses, 10^seq(-2, 4, length = 100))))
-
   # Extract fitted and fixed parameters from the bestfit object.
   fitpars <- bestfit$fitpars
   fixedpars <- bestfit$fixedpars
@@ -214,14 +224,6 @@ simulate_dose_predictions <- function(
   # ---------------------------------------------------------------------------
   # Run all schedules
   # ---------------------------------------------------------------------------
-  schedule_defs <- list(
-    s1 = list(txstart = 1, txend = 3.9, txinterval = 0.5, name = "s1"),
-    s2 = list(txstart = 2, txend = 4.9, txinterval = 0.5, name = "s2"),
-    s3 = list(txstart = 3, txend = 5.9, txinterval = 0.5, name = "s3"),
-    s4 = list(txstart = 1, txend = 3.9, txinterval = 1, name = "s4"),
-    s5 = list(txstart = 1, txend = 1, txinterval = 1, name = "s5")
-  )
-
   # Run each schedule and collect summary + time-series outputs.
   all_results <- lapply(
     schedule_defs,
@@ -265,16 +267,12 @@ simulate_dose_predictions <- function(
     )
   }
 
-  # Friendly labels for downstream plotting.
-  label_map <- c(
-    s1 = "baseline",
-    s2 = "d2 start",
-    s3 = "d3 start",
-    s4 = "daily tx",
-    s5 = "single tx"
-  )
-
   # Compute percent reduction relative to baseline in each schedule.
+  label_map <- vapply(
+    schedule_defs,
+    function(s) if (!is.null(s$label)) s$label else s$name,
+    character(1)
+  )
   reduction_df <- compute_percent_reduction(all_results_df) %>%
     mutate(Scenario = label_map[Schedule])
 

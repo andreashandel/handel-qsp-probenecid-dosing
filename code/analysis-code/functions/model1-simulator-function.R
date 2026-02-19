@@ -34,8 +34,23 @@ source(here::here("code", "analysis-code", "functions", "virus-transform-functio
 model1_simulator <- function(Ad, Ac, At, U, I, V, F, A, S, 
                            b, cI, k, p, kF, cV, gF, hV, Fmax, cF, hF, gA, gS, cS, 
                            Emax_V, C50_V, Emax_F, C50_F, ka, Vc, Vt, Q, Vmax, Km, fmax, f50, 
-                           Ad0, txstart, txinterval, txend, tstart, tfinal, dt, solvertype, tols)
+                           Ad0, txstart, txinterval, txend, tstart, tfinal, dt, solvertype, tols,
+                           times = NULL)
  {
+  run_ode_quietly <- function(fun) {
+    out_con <- textConnection("ode_stdout", "w", local = TRUE)
+    msg_con <- textConnection("ode_messages", "w", local = TRUE)
+    sink(out_con, type = "output")
+    sink(msg_con, type = "message")
+    on.exit({
+      sink(type = "message")
+      sink(type = "output")
+      close(msg_con)
+      close(out_con)
+    }, add = TRUE)
+    fun()
+  }
+
   # inner function that specifies the ODE model
   odemodel <- function(t, y, parms) {
     with(
@@ -56,13 +71,14 @@ model1_simulator <- function(Ad, Ac, At, U, I, V, F, A, S,
        
         
         # compute log10 virus and prevent negative values (centralized helper function)
-        logV = transform_virus(V)
+        # logV = transform_virus(V)
 
         # define system of ODEs
         dU = -b * U * V #uninfected cells
         dI = b * U * V - cI * I - k * I * A #infected cells
         dV = (1 - fV) * p * I / (1 + kF * F) - cV * V #virus
-        dF = (1 - fF) * gF * logV / (logV + hV) * (Fmax - F) - cF * F #innate response
+        #dF = (1 - fF) * gF * logV / (logV + hV) * (Fmax - F) - cF * F #innate response
+        dF = (1 - fF) * gF * V / (V + hV) * (Fmax - F) - cF * F #innate response
         dA =  F / (F + hF) + gA * A #adaptive response
         dS = gS * F - cS * S #symptoms
 
@@ -89,7 +105,14 @@ model1_simulator <- function(Ad, Ac, At, U, I, V, F, A, S,
   # Combine initial conditions into a named state vector.
   Y0 = c(Ad = Ad, Ac = Ac, At = At, U = U, I = I, V = V, F = F, A = A, S = S)
   # Vector of output times (the integrator's internal step size may differ).
-  timevec = seq(tstart, tfinal, by = dt)
+  if (is.null(times)) {
+    timevec = seq(tstart, tfinal, by = dt)
+  } else {
+    timevec = sort(unique(times))
+    if (length(timevec) == 0 || timevec[1] != tstart) {
+      timevec = sort(unique(c(tstart, timevec)))
+    }
+  }
 
   # Combine parameters into a named vector for the ODE function.
   odepars = c(b = b, cI = cI, k = k, p = p, kF = kF, cV = cV, gF = gF, hV = hV, Fmax = Fmax, cF = cF, hF = hF, gA = gA, gS = gS, cS = cS, 
@@ -101,15 +124,25 @@ model1_simulator <- function(Ad, Ac, At, U, I, V, F, A, S,
   # Run the simulation, i.e., integrate the differential equations.
   # The result is saved in the odeoutput matrix. Column 1 is time; subsequent
   # columns are the model variables in the same order as Y0.
-  odeoutput = deSolve::ode(
-    y = Y0,
-    times = timevec,
-    func = odemodel,
-    events = list(func = adddrug, time = drugtimes),
-    parms = odepars,
-    method = solvertype,
-    atol = tols,
-    rtol = tols
+  odeoutput <- withCallingHandlers(
+    run_ode_quietly(function() {
+      deSolve::ode(
+        y = Y0,
+        times = timevec,
+        func = odemodel,
+        events = list(func = adddrug, time = drugtimes),
+      parms = odepars,
+      method = solvertype,
+      atol = tols,
+      rtol = tols,
+      maxsteps = 20000
+      )
+    }),
+    warning = function(w) {
+      if (grepl("MXSTEP", conditionMessage(w))) {
+        invokeRestart("muffleWarning")
+      }
+    }
   )
   return(odeoutput)
 }

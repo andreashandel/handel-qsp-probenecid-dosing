@@ -22,7 +22,7 @@ source(here::here("code", "plotting-code", "functions", "plotting-config-functio
 # -----------------------------------------------------------------------------
 # User settings
 # -----------------------------------------------------------------------------
-model_choice <- "model2" # "model1" or "model2"
+model_choice <- "model1" # "model1" or "model2"
 nsamp <- 1               # How many samples to plot (1 = baseline only)
 
 # Toggle outputs

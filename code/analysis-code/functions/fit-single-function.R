@@ -29,6 +29,9 @@ library(nloptr) # Nonlinear optimization routines.
 #' @param solvertype ODE solver type (e.g., "vode" or "lsoda").
 #' @param tfinal Final time for the ODE solver.
 #' @param dt Time step for the ODE solver.
+#' @param obs_times_by_scenario Optional named list of observation times per scenario.
+#' @param objective_data Optional precomputed objective data for fast evaluation.
+#' @param weight_mode Weighting scheme for observations ("per_block" or "equal_quantity").
 #' @param parlabels Parameter labels for output tables.
 #' @param print_level nloptr print level (0 = silent, higher = more output).
 #' @param oob_action How to handle out-of-bounds initial values ("stop" or "clamp").
@@ -55,6 +58,9 @@ run_single_fit <- function(
   solvertype,
   tfinal,
   dt,
+  obs_times_by_scenario = NULL,
+  objective_data = NULL,
+  weight_mode = "per_block",
   parlabels,
   print_level = 0,
   oob_action = "stop",
@@ -134,7 +140,10 @@ run_single_fit <- function(
     solvertype = solvertype,
     tols = tols,
     simulatorname = simulatorname,
-    logfit = ifelse(logfit, 1, 0)
+    logfit = ifelse(logfit, 1, 0),
+    obs_times_by_scenario = obs_times_by_scenario,
+    objective_data = objective_data,
+    weight_mode = weight_mode
   )
 
   # Attach standardized metadata to the raw nloptr result.

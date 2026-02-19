@@ -1,0 +1,20 @@
+Sample,Type,Schedule,Dose,Message
+3,error,s1,0.010000000000000002,Solver failed with retcode MaxIters
+3,error,s1,0.013257113655901088,Solver failed with retcode MaxIters
+3,error,s1,0.017575106248547922,Solver failed with retcode MaxIters
+3,error,s1,0.023299518105153717,Solver failed with retcode MaxIters
+3,error,s1,0.030888435964774818,Solver failed with retcode MaxIters
+3,error,s1,0.040949150623804255,Solver failed with retcode MaxIters
+3,error,s2,0.010000000000000002,Solver failed with retcode MaxIters
+3,error,s2,0.013257113655901088,Solver failed with retcode MaxIters
+3,error,s2,0.017575106248547922,Solver failed with retcode MaxIters
+3,error,s2,0.023299518105153717,Solver failed with retcode MaxIters
+3,error,s2,0.030888435964774818,Solver failed with retcode MaxIters
+3,error,s2,0.040949150623804255,Solver failed with retcode MaxIters
+3,error,s2,0.054286754393238594,Solver failed with retcode MaxIters
+3,error,s3,0.010000000000000002,Solver failed with retcode MaxIters
+3,error,s3,0.013257113655901088,Solver failed with retcode MaxIters
+3,error,s3,0.017575106248547922,Solver failed with retcode MaxIters
+3,error,s3,0.023299518105153717,Solver failed with retcode MaxIters
+3,error,s3,0.030888435964774818,Solver failed with retcode MaxIters
+3,error,s3,0.040949150623804255,Solver failed with retcode MaxIters

@@ -73,13 +73,16 @@ fixedpars_model2 <- load_fixed_parameters(
   here::here("data", "processed-data", "model2-fixed-parameters.csv")
 )
 
+weight_mode <- "equal_quantity"
+
+objective_data <- prepare_fast_objective_data(fitdata, weight_mode = weight_mode)
+obs_times_by_scenario <- lapply(objective_data$data_by_scenario, function(x) {
+  sort(unique(c(0, x$time)))
+})
+
 sigma_settings <- compute_sigma_settings(
   fitdata,
-  sigma_to_fit = c(
-    paste0("sigma_add_", virus_quantity_name),
-    "sigma_add_IL6",
-    "sigma_add_WeightLossPerc"
-  )
+  sigma_to_fit = character(0)
 )
 
 sigma_fixed_labels <- c(
@@ -91,18 +94,72 @@ sigma_fixed_labels <- c(
 # -----------------------------------------------------------------------------
 # Base model configs (shared defaults, updated with bestfit if available)
 # -----------------------------------------------------------------------------
-load_bestfit_defaults <- function(bestfit_path, fit_defaults, fixed_defaults, Y0_defaults) {
+select_bestfit_entry <- function(bestfit_obj) {
+  if (!is.list(bestfit_obj) || !length(bestfit_obj)) {
+    return(NULL)
+  }
+
+  # If this already looks like a packed bestfit, return it directly.
+  if (!is.null(bestfit_obj$fitpars) || !is.null(bestfit_obj$solution)) {
+    return(bestfit_obj)
+  }
+
+  objectives <- vapply(bestfit_obj, function(entry) {
+    if (is.list(entry) && !is.null(entry$objective) && is.finite(entry$objective)) {
+      entry$objective
+    } else {
+      Inf
+    }
+  }, numeric(1))
+
+  if (all(!is.finite(objectives))) {
+    return(bestfit_obj[[1]])
+  }
+
+  bestfit_obj[[which.min(objectives)]]
+}
+
+resolve_bestfit_path <- function(bestfit_paths) {
+  for (path in bestfit_paths) {
+    if (is.character(path) && length(path) == 1 && file.exists(path)) {
+      return(path)
+    }
+  }
+  NULL
+}
+
+load_bestfit_defaults <- function(bestfit_paths, fit_defaults, fixed_defaults, Y0_defaults) {
+  bestfit_path <- resolve_bestfit_path(bestfit_paths)
+  if (is.null(bestfit_path)) {
+    return(list(
+      fit = fit_defaults[!duplicated(names(fit_defaults))],
+      fixed = fixed_defaults[!duplicated(names(fixed_defaults))],
+      Y0 = Y0_defaults[!duplicated(names(Y0_defaults))]
+    ))
+  }
+
   bestfit_obj <- tryCatch(readRDS(bestfit_path), error = function(e) NULL)
 
   if (is.list(bestfit_obj) && length(bestfit_obj) > 0) {
-    bestfit_first <- bestfit_obj[[1]]
+    bestfit_first <- select_bestfit_entry(bestfit_obj)
+    if (is.null(bestfit_first)) {
+      bestfit_first <- bestfit_obj[[1]]
+    }
 
     if (!is.null(bestfit_first$fitpars)) {
+      extra <- setdiff(names(bestfit_first$fitpars), names(fit_defaults))
+      if (length(extra)) {
+        fit_defaults <- c(fit_defaults, bestfit_first$fitpars[extra])
+      }
       overlap <- intersect(names(fit_defaults), names(bestfit_first$fitpars))
       fit_defaults[overlap] <- bestfit_first$fitpars[overlap]
     } else if (!is.null(bestfit_first$solution) && !is.null(bestfit_first$fitparnames)) {
       bestfit_named <- bestfit_first$solution
       names(bestfit_named) <- bestfit_first$fitparnames
+      extra <- setdiff(names(bestfit_named), names(fit_defaults))
+      if (length(extra)) {
+        fit_defaults <- c(fit_defaults, bestfit_named[extra])
+      }
       overlap <- intersect(names(fit_defaults), names(bestfit_named))
       fit_defaults[overlap] <- bestfit_named[overlap]
     }
@@ -151,12 +208,18 @@ model_configs <- list(
   model1 = build_app_model_config(
     model_choice = "model1",
     fixedpars_bundle = fixedpars_model1,
-    bestfit_path = here::here("results", "output", "model1-bestfit-sample.Rds")
+    bestfit_path = c(
+      here::here("results", "output", "model1-bestfit-multistart.Rds"),
+      here::here("results", "output", "model1-bestfit-sample.Rds")
+    )
   ),
   model2 = build_app_model_config(
     model_choice = "model2",
     fixedpars_bundle = fixedpars_model2,
-    bestfit_path = here::here("results", "output", "model2-bestfit-sample.Rds")
+    bestfit_path = c(
+      here::here("results", "output", "model2-bestfit-multistart.Rds"),
+      here::here("results", "output", "model2-bestfit-sample.Rds")
+    )
   )
 )
 
@@ -199,13 +262,123 @@ format_input_label <- function(name, label_map) {
   paste(name, label_text, sep = " - ")
 }
 
+format_breakdown_table <- function(breakdown_df, value_col) {
+  if (is.null(breakdown_df)) {
+    return(NULL)
+  }
+
+  if (is.list(breakdown_df) && !is.data.frame(breakdown_df)) {
+    breakdown_df <- dplyr::bind_rows(breakdown_df)
+  }
+
+  if (!is.data.frame(breakdown_df)) {
+    return(NULL)
+  }
+
+  required_cols <- c("Quantity", "Scenario", value_col)
+  if (!all(required_cols %in% names(breakdown_df))) {
+    return(NULL)
+  }
+
+  breakdown_df %>%
+    mutate(
+      Quantity = dplyr::recode(
+        as.character(Quantity),
+        VirusLoad = "V",
+        IL6 = "F",
+        WeightLossPerc = "S",
+        .default = as.character(Quantity)
+      ),
+      Scenario = as.character(Scenario)
+    ) %>%
+    group_by(Quantity, Scenario) %>%
+    summarise(value = sum(.data[[value_col]], na.rm = TRUE), .groups = "drop") %>%
+    tidyr::pivot_wider(
+      names_from = Scenario,
+      values_from = value,
+      values_fill = NA_real_,
+      values_fn = sum
+    )
+}
+
+compute_fast_weighted_nll_breakdown <- function(sim_obj_df, sigma_pool, objective_data) {
+  quantity_levels <- objective_data$quantity_levels
+  quantity_id_map <- objective_data$quantity_id_map
+  scenario_levels <- objective_data$scenario_levels
+
+  sigma_add_by_id <- rep(0, length(quantity_levels))
+  sigma_prop_by_id <- rep(0, length(quantity_levels))
+
+  for (i in seq_along(quantity_levels)) {
+    qname <- quantity_levels[i]
+    add_name <- paste0("sigma_add_", qname)
+    prop_name <- paste0("sigma_prop_", qname)
+    if (add_name %in% names(sigma_pool)) {
+      sigma_add_by_id[i] <- sigma_pool[[add_name]]
+    }
+    if (prop_name %in% names(sigma_pool)) {
+      sigma_prop_by_id[i] <- sigma_pool[[prop_name]]
+    }
+  }
+
+  virus_id <- quantity_id_map[[virus_quantity_name]]
+  il6_id <- quantity_id_map[["IL6"]]
+  wl_id <- quantity_id_map[["WeightLossPerc"]]
+
+  block_rows <- lapply(names(objective_data$data_by_scenario), function(scenario_key) {
+    scenario_data <- objective_data$data_by_scenario[[scenario_key]]
+    ode_df <- sim_obj_df %>%
+      filter(as.character(Scenario) == scenario_key) %>%
+      select(time, V, F, S)
+
+    time_index <- match(scenario_data$time, ode_df$time)
+    if (any(is.na(time_index))) {
+      return(NULL)
+    }
+
+    qid <- scenario_data$quantity_id
+    pred <- numeric(length(qid))
+
+    if (!is.null(virus_id) && any(qid == virus_id)) {
+      v_pred <- transform_virus(ode_df$V[time_index])
+      pred[qid == virus_id] <- v_pred[qid == virus_id]
+    }
+    if (!is.null(il6_id) && any(qid == il6_id)) {
+      f_pred <- ode_df$F[time_index]
+      pred[qid == il6_id] <- f_pred[qid == il6_id]
+    }
+    if (!is.null(wl_id) && any(qid == wl_id)) {
+      s_pred <- ode_df$S[time_index]
+      pred[qid == wl_id] <- s_pred[qid == wl_id]
+    }
+
+    add <- sigma_add_by_id[qid]
+    prop <- sigma_prop_by_id[qid]
+    variance <- pmax(add^2 + (prop * pred)^2, objective_data$min_variance)
+    residual <- scenario_data$value - pred
+    nll_point <- 0.5 * (log(variance) + (residual^2) / variance)
+    weighted_nll_point <- scenario_data$weight * nll_point
+
+    tibble(
+      Quantity = factor(quantity_levels[qid], levels = quantity_levels),
+      Scenario = factor(scenario_key, levels = scenario_levels),
+      weighted_nll = weighted_nll_point
+    ) %>%
+      group_by(Quantity, Scenario) %>%
+      summarise(weighted_nll = sum(weighted_nll), .groups = "drop")
+  })
+
+  bind_rows(block_rows)
+}
+
 # -----------------------------------------------------------------------------
 # Simulation helper
 # -----------------------------------------------------------------------------
 solvertype <- "vode"
-tols <- 1e-9
+tols <- 1e-10
 tfinal <- 7
-dt <- 0.002
+dt <- 0.1
+output_times <- seq(0, tfinal, by = dt)
 
 run_model_once <- function(params, fixedpars, Y0_vals, simulatorname) {
   params <- params[!is.na(params)]
@@ -214,7 +387,7 @@ run_model_once <- function(params, fixedpars, Y0_vals, simulatorname) {
   params_ode <- params[!grepl("^sigma_", names(params))]
   fixedpars_ode <- fixedpars[!grepl("^sigma_", names(fixedpars))]
 
-  simulate_one <- function(ad0, scenario_label) {
+  simulate_one <- function(ad0, scenario_label, times) {
     allpars <- c(
       as.list(Y0_vals),
       as.list(params_ode),
@@ -229,7 +402,8 @@ run_model_once <- function(params, fixedpars, Y0_vals, simulatorname) {
         tfinal = tfinal,
         dt = dt,
         solvertype = solvertype,
-        tols = tols
+        tols = tols,
+        times = times
       )
     )
 
@@ -258,33 +432,83 @@ run_model_once <- function(params, fixedpars, Y0_vals, simulatorname) {
     ode_df
   }
 
-  sim_list <- lapply(seq_along(doses), function(i) {
-    simulate_one(doses[i], scenarios[i])
+  sim_obj_list <- lapply(seq_along(doses), function(i) {
+    scenario_key <- as.character(scenarios[i])
+    times <- obs_times_by_scenario[[scenario_key]]
+    if (is.null(times) || !length(times)) {
+      times <- output_times
+    }
+    simulate_one(doses[i], scenarios[i], times)
   })
 
-  failed <- vapply(sim_list, inherits, logical(1), "error")
+  failed <- vapply(sim_obj_list, inherits, logical(1), "error")
   if (any(failed)) {
-    first_error <- sim_list[[which(failed)[1]]]
+    first_error <- sim_obj_list[[which(failed)[1]]]
     return(list(error = first_error))
   }
 
-  sim_df <- bind_rows(sim_list)
+  sim_obj_df <- bind_rows(sim_obj_list)
+
+  objective <- fit_model_function(
+    params = unname(params),
+    fitdata = fitdata,
+    Y0 = Y0_vals,
+    tfinal = tfinal,
+    dt = dt,
+    fitparnames = names(params),
+    fixedpars = fixedpars,
+    doses = doses,
+    scenarios = scenarios,
+    solvertype = solvertype,
+    tols = tols,
+    simulatorname = simulatorname,
+    logfit = 0,
+    obs_times_by_scenario = obs_times_by_scenario,
+    objective_data = objective_data,
+    weight_mode = weight_mode
+  )
 
   sigma_pool <- collect_sigma_pool(params, fixedpars)
-  pred_long <- build_prediction_long(sim_df, scenario_col = "Scenario", time_col = "time")
-  components <- compute_objective_components(fitdata, pred_long, sigma_pool)
 
-  objective <- components$objective
+  breakdown_nll_fast <- compute_fast_weighted_nll_breakdown(
+    sim_obj_df = sim_obj_df,
+    sigma_pool = sigma_pool,
+    objective_data = objective_data
+  )
+
+  pred_long <- build_prediction_long(sim_obj_df, scenario_col = "Scenario", time_col = "time")
+  components <- compute_objective_components(
+    fitdata,
+    pred_long,
+    sigma_pool,
+    weight_mode = weight_mode
+  )
   if (!is.finite(objective)) {
     objective <- simpleError("Objective evaluation failed (non-finite result).")
   }
 
+  if (is.null(breakdown_nll_fast) || !nrow(breakdown_nll_fast)) {
+    breakdown_nll_fast <- components$breakdown_nll
+  }
+
   breakdown <- list(
-    nll = components$breakdown_nll,
+    nll = breakdown_nll_fast,
     ssr = components$breakdown_ssr
   )
 
-  list(sim = sim_df, objective = objective, breakdown = breakdown)
+  sim_plot_list <- lapply(seq_along(doses), function(i) {
+    simulate_one(doses[i], scenarios[i], output_times)
+  })
+
+  failed_plot <- vapply(sim_plot_list, inherits, logical(1), "error")
+  if (any(failed_plot)) {
+    first_error <- sim_plot_list[[which(failed_plot)[1]]]
+    return(list(error = first_error))
+  }
+
+  sim_plot_df <- bind_rows(sim_plot_list)
+
+  list(sim = sim_plot_df, objective = objective, breakdown = breakdown)
 }
 
 # -----------------------------------------------------------------------------
@@ -457,18 +681,7 @@ server <- function(input, output, session) {
       return(NULL)
     }
 
-    res$breakdown$nll %>%
-      mutate(
-        Quantity = recode(Quantity,
-                          VirusLoad = "V",
-                          IL6 = "F",
-                          WeightLossPerc = "S")
-      ) %>%
-      select(Quantity, Scenario, weighted_nll) %>%
-      tidyr::pivot_wider(
-        names_from = Scenario,
-        values_from = weighted_nll
-      )
+    format_breakdown_table(res$breakdown$nll, "weighted_nll")
   }, digits = 4, rownames = TRUE)
 
   output$objective_ssr <- renderTable({
@@ -477,18 +690,7 @@ server <- function(input, output, session) {
       return(NULL)
     }
 
-    res$breakdown$ssr %>%
-      mutate(
-        Quantity = recode(Quantity,
-                          VirusLoad = "V",
-                          IL6 = "F",
-                          WeightLossPerc = "S")
-      ) %>%
-      select(Quantity, Scenario, weighted_ssr) %>%
-      tidyr::pivot_wider(
-        names_from = Scenario,
-        values_from = weighted_ssr
-      )
+    format_breakdown_table(res$breakdown$ssr, "weighted_ssr")
   }, digits = 4, rownames = TRUE)
 
   output$fit_plot <- renderPlot({
