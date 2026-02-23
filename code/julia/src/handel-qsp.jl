@@ -33,7 +33,7 @@ using DataFrames
 using Dates
 using DifferentialEquations
 using BlackBoxOptim
-using Optim
+using NLopt
 using QuasiMonteCarlo
 using Statistics
 using Random

@@ -14,6 +14,7 @@ Expected input
 Run command
 -----------
 `julia --project=code/julia code/julia/scripts/run-dose-predictions.jl`
+or run with: include("code/julia/scripts/run-dose-predictions.jl")
 """
 
 import Pkg
@@ -30,3 +31,4 @@ model_choice = "model1"
 
 settings = HandelQSP.default_dose_prediction_settings(model_choice)
 HandelQSP.run_dose_prediction_workflow(settings)
+

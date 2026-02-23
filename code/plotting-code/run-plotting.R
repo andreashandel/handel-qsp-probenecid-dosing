@@ -13,6 +13,24 @@ library(tidyr)
 library(here)
 library(gt)
 
+# Ensure a valid temp directory exists for this R session.
+# On Windows, long-lived IDE sessions can end up with stale temp paths.
+ensure_valid_tempdir <- function() {
+  td <- tryCatch(tempdir(check = TRUE), error = function(e) NA_character_)
+  if (!is.character(td) || is.na(td) || !dir.exists(td)) {
+    fallback_td <- file.path(getwd(), "results", "tmp-r")
+    dir.create(fallback_td, recursive = TRUE, showWarnings = FALSE)
+    Sys.setenv(TMPDIR = fallback_td, TMP = fallback_td, TEMP = fallback_td)
+    td <- tempdir(check = TRUE)
+  }
+  if (!dir.exists(td)) {
+    dir.create(td, recursive = TRUE, showWarnings = FALSE)
+  }
+  invisible(td)
+}
+
+ensure_valid_tempdir()
+
 # Plotting helpers
 source(here::here("code", "plotting-code", "functions", "timeseries-plot-function.R"))
 source(here::here("code", "plotting-code", "functions", "dose-response-plot-function.R"))
@@ -144,6 +162,12 @@ if (make_timeseries_figures) {
     bestfit <- bestfit_list[[i]]
     all_ts <- df_list[[i]] %>%
       filter(Schedule == "s1", Dose %in% bestfit_doses)
+    objective_value <- suppressWarnings(as.numeric(bestfit$objective))
+    objective_label <- if (length(objective_value) == 1 && is.finite(objective_value)) {
+      format(signif(objective_value, 6), scientific = FALSE, trim = TRUE)
+    } else {
+      "NA"
+    }
 
     bestfit_plots <- plot_timeseries(
       data = bestfit$fitdata,
@@ -152,7 +176,13 @@ if (make_timeseries_figures) {
       dose_levels = bestfit_doses,
       dose_levels_labels = bestfit_dose_labels,
       x_jitter = 0.3
-    )
+    ) +
+      plot_annotation(
+        title = paste0("Best-fit objective: ", objective_label),
+        theme = theme(
+          plot.title = element_text(hjust = 0.5, face = "bold", size = 12)
+        )
+      )
 
     ggsave(
       here::here(fig_dir, paste0(model_choice, "-bestfit", i, ".png")),

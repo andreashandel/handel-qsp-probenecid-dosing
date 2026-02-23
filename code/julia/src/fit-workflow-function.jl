@@ -7,8 +7,8 @@ Why this design differs from R
 The R workflow is a two-stage multistart pipeline based on NLopt local
 algorithms. In this Julia implementation we use a hybrid global-local approach:
 
-1. Global search with `BlackBoxOptim` Differential Evolution (DE).
-2. Local bound-constrained refinement with `Optim` (`Fminbox + NelderMead`).
+1. Configurable global search (`BlackBoxOptim` DE by default; optional `NLopt` global algorithms).
+2. Local bound-constrained refinement with `NLopt`.
 3. Optional local restarts around the best solution.
 
 This setup tends to explore rugged, multi-modal landscapes better than relying
@@ -44,10 +44,13 @@ function default_fit_settings(model_choice::String = "model1")
         global_nthreads = 1,
         global_trace_mode = :compact,
         global_trace_interval = 10.0,
+        global_optimizer = :blackboxoptim,
+        global_nlopt_algorithm = :gn_esch,
+        global_nlopt_population = 0,
         n_local_restarts = 12,
         local_jitter_scale = 0.1,
         local_maxiters = 2_500,
-        local_optimizer = :nelder_mead,
+        local_optimizer = :bobyqa,
         local_show_trace = false,
 
         # Sampling-stage settings (optional).
@@ -58,7 +61,7 @@ function default_fit_settings(model_choice::String = "model1")
         sample_seed = 1234,
         sampling_use_log_space = true,
         sampling_local_maxiters = 1_000,
-        sampling_local_optimizer = :nelder_mead,
+        sampling_local_optimizer = :bobyqa,
         sampling_local_show_trace = false,
 
         # Output paths.
@@ -77,10 +80,12 @@ function make_fixed_parameter_samples(
     fixedpars::Dict{String,Float64},
     nsamp::Int;
     seed::Int = 1234,
-    lower_factor::Float64 = 0.5,
-    upper_factor::Float64 = 2.0,
+    lower_factor::Real = 0.5,
+    upper_factor::Real = 2.0,
 )
     rng = MersenneTwister(seed)
+    lower_factor_f = Float64(lower_factor)
+    upper_factor_f = Float64(upper_factor)
     samples = Vector{Dict{String,Float64}}()
     push!(samples, deepcopy(fixedpars))
 
@@ -104,8 +109,8 @@ function make_fixed_parameter_samples(
         d = Dict{String,Float64}()
         for (j, k) in enumerate(keys_sorted)
             base = fixedpars[k]
-            lo = lower_factor * base
-            hi = upper_factor * base
+            lo = lower_factor_f * base
+            hi = upper_factor_f * base
             d[k] = lhs_unit[i, j] * (hi - lo) + lo
         end
         push!(samples, d)
@@ -189,17 +194,24 @@ Run bounded local refinement from one start point.
 """
 function choose_local_optimizer(optimizer_kind::Symbol)
     k = Symbol(lowercase(String(optimizer_kind)))
-    if k in (:neldermead, :nelder_mead, :nm)
-        return NelderMead()
-    elseif k in (:lbfgs, :l_bfgs)
-        return LBFGS()
-    elseif k == :bfgs
-        return BFGS()
-    elseif k in (:cg, :conjugate_gradient)
-        return ConjugateGradient()
+    if k in (:neldermead, :nelder_mead, :nm, :ln_neldermead)
+        return :LN_NELDERMEAD
+    elseif k in (:sbplx, :subplex, :ln_sbplx)
+        return :LN_SBPLX
+    elseif k in (:bobyqa, :ln_bobyqa)
+        return :LN_BOBYQA
+    elseif k in (:cobyla, :ln_cobyla)
+        return :LN_COBYLA
+    elseif k in (:newuoa, :ln_newuoa)
+        return :LN_NEWUOA
+    elseif k in (:praxis, :ln_praxis)
+        return :LN_PRAXIS
+    elseif k in (:lbfgs, :l_bfgs, :bfgs, :cg, :conjugate_gradient)
+        @warn "Gradient-based local optimizer alias requested; using NLopt derivative-free :LN_BOBYQA." optimizer_kind = optimizer_kind
+        return :LN_BOBYQA
     else
-        @warn "Unknown local optimizer. Falling back to NelderMead()." optimizer_kind = optimizer_kind
-        return NelderMead()
+        @warn "Unknown local optimizer. Falling back to NLopt :LN_BOBYQA." optimizer_kind = optimizer_kind
+        return :LN_BOBYQA
     end
 end
 
@@ -209,32 +221,116 @@ function local_refine(
     ub::Vector{Float64},
     objective_fn::Function,
     maxiters::Int,
-    optimizer_kind::Symbol = :nelder_mead,
+    optimizer_kind::Symbol = :bobyqa,
     show_trace::Bool = false,
 )
-    # Fminbox expects a strictly interior start. Move boundary points inward.
-    span = ub .- lb
-    eps = max.(1e-12, 1e-8 .* max.(1.0, abs.(span)))
-    lo = lb .+ eps
-    hi = ub .- eps
-    interior_mask = lo .< hi
-    xstart = copy(x0)
-    xstart[interior_mask] .= clamp.(x0[interior_mask], lo[interior_mask], hi[interior_mask])
-    xstart[.!interior_mask] .= clamp.(x0[.!interior_mask], lb[.!interior_mask], ub[.!interior_mask])
+    xstart = clamp.(x0, lb, ub)
+    algo = choose_local_optimizer(optimizer_kind)
+    npars = length(xstart)
 
-    result = optimize(
-        objective_fn,
-        lb,
-        ub,
-        xstart,
-        Fminbox(choose_local_optimizer(optimizer_kind)),
-        Optim.Options(iterations = maxiters, show_trace = show_trace),
+    opt = NLopt.Opt(algo, npars)
+    NLopt.lower_bounds!(opt, lb)
+    NLopt.upper_bounds!(opt, ub)
+    NLopt.maxeval!(opt, maxiters)
+    NLopt.xtol_rel!(opt, 1e-8)
+
+    span = max.(ub .- lb, 1e-8)
+    initial_step = max.(1e-8, 0.05 .* span)
+    try
+        NLopt.initial_step!(opt, initial_step)
+    catch
+    end
+
+    eval_count = Ref(0)
+    best_seen = Ref(Inf)
+    NLopt.min_objective!(
+        opt,
+        function(x, grad)
+            eval_count[] += 1
+            if !isempty(grad)
+                fill!(grad, 0.0)
+            end
+            val = objective_fn(Float64.(x))
+            val_f = isfinite(val) ? Float64(val) : 1e10
+            if val_f < best_seen[]
+                best_seen[] = val_f
+            end
+            if show_trace && (eval_count[] == 1 || eval_count[] % 25 == 0)
+                emit_console_line(
+                    "NLopt local trace: eval=$(eval_count[]), objective=$(round(val_f; sigdigits = 8)), best=$(round(best_seen[]; sigdigits = 8))",
+                )
+            end
+            return val_f
+        end,
     )
+
+    minf, minx, ret = try
+        NLopt.optimize(opt, xstart)
+    catch err
+        @warn "NLopt local refinement failed; returning clamped start point." optimizer_kind = optimizer_kind algorithm = algo error = sprint(showerror, err)
+        x_fail = clamp.(xstart, lb, ub)
+        return (
+            x = x_fail,
+            objective = Float64(objective_fn(x_fail)),
+            iterations = Int(eval_count[]),
+        )
+    end
+
+    x_min = clamp.(Float64.(minx), lb, ub)
+    obj_min = objective_fn(x_min)
+    if !isfinite(obj_min)
+        obj_min = Float64(minf)
+    end
+    if ret in (:FAILURE, :INVALID_ARGS, :OUT_OF_MEMORY, :ROUNDOFF_LIMITED, :FORCED_STOP)
+        @warn "NLopt local refinement ended with non-success status." return_code = ret optimizer_kind = optimizer_kind algorithm = algo
+    end
     return (
-        x = copy(Optim.minimizer(result)),
-        objective = Float64(Optim.minimum(result)),
-        iterations = Int(Optim.iterations(result)),
+        x = x_min,
+        objective = Float64(obj_min),
+        iterations = Int(NLopt.numevals(opt)),
     )
+end
+
+"""
+Choose global optimizer backend for stage-1 search.
+"""
+function choose_global_optimizer_backend(backend_kind::Symbol)
+    k = Symbol(lowercase(String(backend_kind)))
+    if k in (:blackboxoptim, :blackbox, :bbo, :de)
+        return :blackboxoptim
+    elseif k in (:nlopt, :nlopt_global, :nl)
+        return :nlopt
+    else
+        @warn "Unknown global optimizer backend. Falling back to BlackBoxOptim DE." backend_kind = backend_kind
+        return :blackboxoptim
+    end
+end
+
+"""
+Choose NLopt global algorithm.
+"""
+function choose_global_nlopt_algorithm(algorithm_kind::Symbol)
+    k = Symbol(lowercase(String(algorithm_kind)))
+    if k in (:gn_esch, :esch)
+        return :GN_ESCH
+    elseif k in (:gn_crs2_lm, :crs2, :crs)
+        return :GN_CRS2_LM
+    elseif k in (:gn_direct_l, :direct_l)
+        return :GN_DIRECT_L
+    elseif k in (:gn_direct, :direct)
+        return :GN_DIRECT
+    elseif k in (:gn_direct_noscal, :direct_noscal)
+        return :GN_DIRECT_NOSCAL
+    elseif k in (:gn_direct_l_noscal, :direct_l_noscal)
+        return :GN_DIRECT_L_NOSCAL
+    elseif k in (:gn_direct_lr, :direct_lr)
+        return :GN_DIRECT_L_RAND
+    elseif k in (:gn_direct_lr_noscal, :direct_lr_noscal)
+        return :GN_DIRECT_L_RAND_NOSCAL
+    else
+        @warn "Unknown NLopt global algorithm. Falling back to :GN_ESCH." algorithm_kind = algorithm_kind
+        return :GN_ESCH
+    end
 end
 
 """
@@ -281,6 +377,131 @@ function global_search_de(
         )
     end
     return (x = Float64.(best_candidate(res)), objective = Float64(best_fitness(res)))
+end
+
+"""
+Run global search using NLopt global algorithms.
+"""
+function global_search_nlopt(
+    objective_fn::Function,
+    lb::Vector{Float64},
+    ub::Vector{Float64};
+    maxeval::Int,
+    algorithm::Symbol = :gn_esch,
+    population::Int = 0,
+    trace_mode::Symbol = :silent,
+    trace_interval::Float64 = 10.0,
+)
+    algo = choose_global_nlopt_algorithm(algorithm)
+    npars = length(lb)
+    opt = NLopt.Opt(algo, npars)
+    NLopt.lower_bounds!(opt, lb)
+    NLopt.upper_bounds!(opt, ub)
+    NLopt.maxeval!(opt, maxeval)
+    NLopt.xtol_rel!(opt, 1e-8)
+
+    population_i = Int(population)
+    if population_i > 0
+        try
+            NLopt.population!(opt, population_i)
+        catch err
+            @warn "Could not set NLopt global population; continuing with NLopt default." population = population_i algorithm = algo error = sprint(showerror, err)
+        end
+    end
+
+    do_trace = Symbol(trace_mode) != :silent
+    eval_count = Ref(0)
+    best_seen = Ref(Inf)
+    t_last_trace = Ref(time())
+    NLopt.min_objective!(
+        opt,
+        function(x, grad)
+            eval_count[] += 1
+            if !isempty(grad)
+                fill!(grad, 0.0)
+            end
+            val = objective_fn(Float64.(x))
+            val_f = isfinite(val) ? Float64(val) : 1e10
+            if val_f < best_seen[]
+                best_seen[] = val_f
+            end
+            if do_trace
+                now_t = time()
+                if (eval_count[] == 1) || (now_t - t_last_trace[] >= trace_interval)
+                    emit_console_line(
+                        "NLopt global trace: eval=$(eval_count[]), objective=$(round(val_f; sigdigits = 8)), best=$(round(best_seen[]; sigdigits = 8))",
+                    )
+                    t_last_trace[] = now_t
+                end
+            end
+            return val_f
+        end,
+    )
+
+    xstart = clamp.(0.5 .* (lb .+ ub), lb, ub)
+    minf, minx, ret = try
+        NLopt.optimize(opt, xstart)
+    catch err
+        @warn "NLopt global search failed; returning midpoint start." algorithm = algo error = sprint(showerror, err)
+        x_fail = xstart
+        return (x = x_fail, objective = Float64(objective_fn(x_fail)))
+    end
+
+    x_min = clamp.(Float64.(minx), lb, ub)
+    obj_min = objective_fn(x_min)
+    if !isfinite(obj_min)
+        obj_min = Float64(minf)
+    end
+    if ret in (:FAILURE, :INVALID_ARGS, :OUT_OF_MEMORY, :ROUNDOFF_LIMITED, :FORCED_STOP)
+        @warn "NLopt global search ended with non-success status." return_code = ret algorithm = algo
+    end
+
+    return (x = x_min, objective = Float64(obj_min))
+end
+
+"""
+Run configured global search backend for stage-1 optimization.
+"""
+function global_search(
+    objective_fn::Function,
+    lb::Vector{Float64},
+    ub::Vector{Float64};
+    maxeval::Int,
+    population::Int,
+    nthreads::Int = 1,
+    trace_mode::Symbol = :silent,
+    trace_interval::Float64 = 10.0,
+    backend::Symbol = :blackboxoptim,
+    nlopt_algorithm::Symbol = :gn_esch,
+    nlopt_population::Int = 0,
+)
+    backend_eff = choose_global_optimizer_backend(backend)
+    if backend_eff == :blackboxoptim
+        return global_search_de(
+            objective_fn,
+            lb,
+            ub;
+            maxeval = maxeval,
+            population = population,
+            nthreads = nthreads,
+            trace_mode = trace_mode,
+            trace_interval = trace_interval,
+        )
+    end
+
+    if nthreads > 1
+        @info "NLopt global optimizer selected; `global_nthreads` is ignored (NLopt global search runs single-threaded here)." requested_threads = nthreads
+    end
+    return global_search_nlopt(
+        objective_fn,
+        lb,
+        ub;
+        maxeval = maxeval,
+        algorithm = nlopt_algorithm,
+        population = nlopt_population,
+        trace_mode = trace_mode,
+        trace_interval = trace_interval,
+    )
 end
 
 """
@@ -394,7 +615,10 @@ function fit_one_fixed_parameter_set(
     obj_x0 = verbose_log ? objective_fn(x0) : NaN
 
     t_global = time()
-    global_best = global_search_de(
+    global_backend = hasproperty(settings, :global_optimizer) ? Symbol(settings.global_optimizer) : :blackboxoptim
+    global_nlopt_algorithm = hasproperty(settings, :global_nlopt_algorithm) ? Symbol(settings.global_nlopt_algorithm) : :gn_esch
+    global_nlopt_population = hasproperty(settings, :global_nlopt_population) ? Int(settings.global_nlopt_population) : 0
+    global_best = global_search(
         objective_fn,
         lbv,
         ubv;
@@ -403,13 +627,16 @@ function fit_one_fixed_parameter_set(
         nthreads = Int(settings.global_nthreads),
         trace_mode = Symbol(settings.global_trace_mode),
         trace_interval = Float64(settings.global_trace_interval),
+        backend = global_backend,
+        nlopt_algorithm = global_nlopt_algorithm,
+        nlopt_population = global_nlopt_population,
     )
     global_elapsed_min = elapsed_minutes(t_global)
 
     # Local refinement starts are ordered as:
     # 1) reused prior bestfit starts (if provided), then
-    # 2) DE-seeded starts: global best + jittered neighbors.
-    # `settings.n_local_restarts` is the total number of starts in the DE-seeded
+    # 2) global-seeded starts: global best + jittered neighbors.
+    # `settings.n_local_restarts` is the total number of starts in the global-seeded
     # block (including the global best itself).
     starts = Vector{Vector{Float64}}()
 
@@ -427,7 +654,7 @@ function fit_one_fixed_parameter_set(
     end
 
     push!(starts, copy(global_best.x))
-    n_de_seeded = 1
+    n_global_seeded = 1
 
     rng = Random.default_rng()
     span = ubv .- lbv
@@ -440,31 +667,71 @@ function fit_one_fixed_parameter_set(
     end
 
     t_local = time()
-    local_results = Vector{NamedTuple{(:x, :objective, :iterations),Tuple{Vector{Float64},Float64,Int}}}()
-    local_start_objectives = Float64[]
-    local_final_objectives = Float64[]
+    n_starts = length(starts)
+    local_results = Vector{NamedTuple{(:x, :objective, :iterations),Tuple{Vector{Float64},Float64,Int}}}(undef, n_starts)
+    local_start_objectives = Vector{Float64}(undef, n_starts)
+    local_final_objectives = Vector{Float64}(undef, n_starts)
     emit_console_line(
-        "Stage 2 local refinement starts: reused=$(n_reused), de_best=$(n_de_seeded), jittered=$(n_jitter), total=$(length(starts)), jitter_scale=$(jitter_scale).",
+        "Stage 2 local refinement starts: reused=$(n_reused), global_best=$(n_global_seeded), jittered=$(n_jitter), total=$(length(starts)), jitter_scale=$(jitter_scale).",
     )
     emit_console_line("Stage 2 local refinement: running $(length(starts)) local starts.")
-    for (i, s) in enumerate(starts)
-        start_obj = objective_fn(s)
-        push!(local_start_objectives, start_obj)
-        emit_console_line("Stage 2 local refine $(i)/$(length(starts)) start objective = $(round(start_obj; sigdigits = 8))")
+    use_threading = settings.n_workers > 1 && Threads.nthreads() > 1 && n_starts > 1
+    if use_threading
+        max_workers = min(max(1, Int(settings.n_workers)), Threads.nthreads())
+        @info "Stage 2 local refinement using threaded execution" requested_workers = settings.n_workers active_workers = max_workers available_threads = Threads.nthreads()
+        sem = Base.Semaphore(max_workers)
+        tasks = Vector{Task}(undef, n_starts)
 
-        lr = local_refine(
-            s,
-            lbv,
-            ubv,
-            objective_fn,
-            settings.local_maxiters,
-            Symbol(settings.local_optimizer),
-            Bool(settings.local_show_trace),
-        )
+        for (i, s) in enumerate(starts)
+            Base.acquire(sem)
+            tasks[i] = Threads.@spawn begin
+                try
+                    start_obj = objective_fn(s)
+                    local_start_objectives[i] = start_obj
+                    emit_console_line("Stage 2 local refine $(i)/$(n_starts) start objective = $(round(start_obj; sigdigits = 8))")
 
-        push!(local_final_objectives, lr.objective)
-        emit_console_line("Stage 2 local refine $(i)/$(length(starts)) final objective = $(round(lr.objective; sigdigits = 8))")
-        push!(local_results, lr)
+                    lr = local_refine(
+                        s,
+                        lbv,
+                        ubv,
+                        objective_fn,
+                        settings.local_maxiters,
+                        Symbol(settings.local_optimizer),
+                        Bool(settings.local_show_trace),
+                    )
+
+                    local_final_objectives[i] = lr.objective
+                    local_results[i] = lr
+                    emit_console_line("Stage 2 local refine $(i)/$(n_starts) final objective = $(round(lr.objective; sigdigits = 8))")
+                finally
+                    Base.release(sem)
+                end
+            end
+        end
+
+        for t in tasks
+            fetch(t)
+        end
+    else
+        for (i, s) in enumerate(starts)
+            start_obj = objective_fn(s)
+            local_start_objectives[i] = start_obj
+            emit_console_line("Stage 2 local refine $(i)/$(n_starts) start objective = $(round(start_obj; sigdigits = 8))")
+
+            lr = local_refine(
+                s,
+                lbv,
+                ubv,
+                objective_fn,
+                settings.local_maxiters,
+                Symbol(settings.local_optimizer),
+                Bool(settings.local_show_trace),
+            )
+
+            local_final_objectives[i] = lr.objective
+            local_results[i] = lr
+            emit_console_line("Stage 2 local refine $(i)/$(n_starts) final objective = $(round(lr.objective; sigdigits = 8))")
+        end
     end
     emit_console_line("Stage 2 local refinement start objectives ($(length(local_start_objectives))) = $(local_start_objectives)")
     emit_console_line("Stage 2 local refinement final objectives ($(length(local_final_objectives))) = $(local_final_objectives)")
@@ -474,7 +741,8 @@ function fit_one_fixed_parameter_set(
     if verbose_log
         top_n = min(fit_log_top_n(settings), length(local_results))
         top_vals = [local_results[i].objective for i in 1:top_n]
-        @info "Fit block summary" label = fit_label started_at = fit_block_started_at finished_at = timestamp_now() procedure = "global_DE_then_local_refine" objective_initial = obj_x0 objective_global = global_best.objective objective_best = local_results[1].objective n_local_starts = length(starts) n_reused_prior_starts = n_reused global_elapsed_min = global_elapsed_min local_elapsed_min = local_elapsed_min total_elapsed_min = elapsed_minutes(t_fit_block) local_start_objectives = local_start_objectives local_final_objectives = local_final_objectives top_n = top_n top_objectives = top_vals
+        procedure_label = "global_$(choose_global_optimizer_backend(global_backend))_then_local_refine"
+        @info "Fit block summary" label = fit_label started_at = fit_block_started_at finished_at = timestamp_now() procedure = procedure_label global_backend = global_backend global_nlopt_algorithm = global_nlopt_algorithm objective_initial = obj_x0 objective_global = global_best.objective objective_best = local_results[1].objective n_local_starts = length(starts) n_reused_prior_starts = n_reused global_elapsed_min = global_elapsed_min local_elapsed_min = local_elapsed_min total_elapsed_min = elapsed_minutes(t_fit_block) local_start_objectives = local_start_objectives local_final_objectives = local_final_objectives top_n = top_n top_objectives = top_vals
     end
 
     # Convert to compact bestfit objects.
@@ -528,8 +796,10 @@ function fit_one_fixed_parameter_set_local_only(
 
     use_log = Bool(settings.sampling_use_log_space)
     if use_log
-        # Ensure positivity before log transform.
-        x0_nat = max.(x0_nat, 1e-12)
+        # Keep starts inside model bounds; avoid forcing tiny valid parameters
+        # (e.g., 1e-14) up to an arbitrary floor.
+        x0_nat = clamp.(x0_nat, lb_nat, ub_nat)
+        x0_nat = max.(x0_nat, nextfloat(0.0))
         x0 = log.(x0_nat)
         lbv = log.(lb_nat)
         ubv = log.(ub_nat)
@@ -596,7 +866,10 @@ function run_fit_workflow(settings = default_fit_settings())
     start_wall = now()
     t_run = time()
     @info "Starting Julia run-fit" model = settings.model_choice started_at = timestamp_now()
-    @info "Fit settings" run_sampling_stage = settings.run_sampling_stage n_workers = settings.n_workers use_log_space = settings.use_log_space weight_mode = settings.weight_mode sigma_to_fit = join(settings.sigma_to_fit, ", ") solver_settings = settings.solver_settings global_maxeval = settings.global_maxeval global_population = settings.global_population global_nthreads = settings.global_nthreads global_trace_mode = settings.global_trace_mode global_trace_interval = settings.global_trace_interval n_local_restarts = settings.n_local_restarts local_jitter_scale = settings.local_jitter_scale local_maxiters = settings.local_maxiters local_optimizer = settings.local_optimizer local_show_trace = settings.local_show_trace nsamp = settings.nsamp sampling_use_log_space = settings.sampling_use_log_space sampling_local_maxiters = settings.sampling_local_maxiters sampling_local_optimizer = settings.sampling_local_optimizer sampling_local_show_trace = settings.sampling_local_show_trace reuse_previous_bestfit = settings.reuse_previous_bestfit previous_bestfit_file = settings.previous_bestfit_file previous_bestfit_n = settings.previous_bestfit_n output_dir = settings.output_dir
+    global_optimizer = hasproperty(settings, :global_optimizer) ? Symbol(settings.global_optimizer) : :blackboxoptim
+    global_nlopt_algorithm = hasproperty(settings, :global_nlopt_algorithm) ? Symbol(settings.global_nlopt_algorithm) : :gn_esch
+    global_nlopt_population = hasproperty(settings, :global_nlopt_population) ? Int(settings.global_nlopt_population) : 0
+    @info "Fit settings" run_sampling_stage = settings.run_sampling_stage n_workers = settings.n_workers use_log_space = settings.use_log_space weight_mode = settings.weight_mode sigma_to_fit = join(settings.sigma_to_fit, ", ") solver_settings = settings.solver_settings global_optimizer = global_optimizer global_nlopt_algorithm = global_nlopt_algorithm global_nlopt_population = global_nlopt_population global_maxeval = settings.global_maxeval global_population = settings.global_population global_nthreads = settings.global_nthreads global_trace_mode = settings.global_trace_mode global_trace_interval = settings.global_trace_interval n_local_restarts = settings.n_local_restarts local_jitter_scale = settings.local_jitter_scale local_maxiters = settings.local_maxiters local_optimizer = settings.local_optimizer local_show_trace = settings.local_show_trace nsamp = settings.nsamp sampling_use_log_space = settings.sampling_use_log_space sampling_local_maxiters = settings.sampling_local_maxiters sampling_local_optimizer = settings.sampling_local_optimizer sampling_local_show_trace = settings.sampling_local_show_trace reuse_previous_bestfit = settings.reuse_previous_bestfit previous_bestfit_file = settings.previous_bestfit_file previous_bestfit_n = settings.previous_bestfit_n output_dir = settings.output_dir
 
     setup_elapsed_min = NaN
     baseline_fit_elapsed_min = NaN
@@ -670,7 +943,7 @@ function run_fit_workflow(settings = default_fit_settings())
     stage1_t0 = time()
     log_stage_start(
         "2/4 baseline fitting";
-        detail = "Run global Differential Evolution search, then bounded local refinement from multiple starts.",
+        detail = "Run configured global search backend, then bounded local refinement from multiple starts.",
     )
     bestfits_multistart = fit_one_fixed_parameter_set(
         settings,

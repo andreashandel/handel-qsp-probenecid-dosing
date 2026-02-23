@@ -15,8 +15,8 @@ This Julia workflow does **not** re-implement:
 
 The R fitting workflow is effective but uses local NLopt methods with multistart. In broad and rugged objective landscapes, local methods can spend too much compute in locally good basins. The Julia implementation uses a **hybrid global-local strategy**:
 
-1. **Global exploration** with Differential Evolution (`BlackBoxOptim`)
-2. **Local polishing** under bounds with `Optim` (`Fminbox + NelderMead`)
+1. **Global exploration** with configurable backend (default Differential Evolution via `BlackBoxOptim`, optional `NLopt` global algorithms)
+2. **Local polishing** under bounds with `NLopt` (default `:LN_BOBYQA`)
 3. Optional **local restarts** around the global best point
 
 This typically gives stronger global coverage than local-only multistart while retaining a robust final refinement.
@@ -106,6 +106,8 @@ Each script keeps a **single user settings block** near the top. For fitting, `s
 
 - `model_choice`
 - `run_sampling_stage`
+- `global_optimizer`
+- `global_nlopt_algorithm` (if `global_optimizer = :nlopt`)
 - `global_maxeval`
 - `global_trace_mode`
 - `verbose_fit_log`
@@ -116,6 +118,28 @@ Each script keeps a **single user settings block** near the top. For fitting, `s
 - `sampling_local_maxiters`
 - `solver_settings` (default uses stiff solver `rodas5p`)
 - `verbose_fit_log` and `log_top_n` for runtime diagnostics
+
+Available local NLopt algorithms in `run-fit.jl`:
+- `:bobyqa`
+- `:sbplx` (alias `:subplex`)
+- `:nelder_mead` (aliases `:neldermead`, `:nm`)
+- `:cobyla`
+- `:newuoa`
+- `:praxis`
+
+Available global optimizer choices in `run-fit.jl`:
+- `global_optimizer = :blackboxoptim` (default DE backend)
+- `global_optimizer = :nlopt` (NLopt global backend)
+
+Available NLopt global algorithms in `run-fit.jl`:
+- `:gn_esch`
+- `:gn_crs2_lm`
+- `:gn_direct`
+- `:gn_direct_l`
+- `:gn_direct_noscal`
+- `:gn_direct_l_noscal`
+- `:gn_direct_lr`
+- `:gn_direct_lr_noscal`
 
 Parallel note:
 - `n_workers` is honored for threaded sampling-stage fitting (capped by available Julia threads).

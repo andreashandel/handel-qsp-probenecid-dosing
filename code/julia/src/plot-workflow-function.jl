@@ -443,9 +443,20 @@ function run_plot_workflow(settings = default_plot_settings())
         for i in 1:nsamp
             simdf = simres_list[i]["timeseries_df"]
             sub = simdf[(simdf.Schedule .== "s1") .& in.(Float64.(simdf.Dose), Ref([0.0, 10.0, 100.0])), :]
+            objective_label = "NA"
+            if haskey(bestfit_list[i], "objective")
+                objective_val = try
+                    Float64(bestfit_list[i]["objective"])
+                catch
+                    NaN
+                end
+                if isfinite(objective_val)
+                    objective_label = @sprintf("%.6g", objective_val)
+                end
+            end
             plot_timeseries_panel(
                 sub;
-                title = "$(settings.model_choice) baseline bestfit sample $(i)",
+                title = "$(settings.model_choice) baseline bestfit sample $(i) | objective: $(objective_label)",
                 outfile = joinpath(settings.output_fig_dir, "$(settings.model_choice)-bestfit$(i)-julia.png"),
                 obs_data = bestfit_list[i]["fitdata"],
             )

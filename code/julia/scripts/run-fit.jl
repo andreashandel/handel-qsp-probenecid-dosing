@@ -62,35 +62,46 @@ solver_settings = (
     dt = 0.1,
 )
 
-# Hybrid optimizer settings (global + local).
-global_maxeval = 200_000                 # DE objective evaluations
-global_population = 300                 # DE population size
-global_nthreads = max(1, min(n_workers, Threads.nthreads())) # DE threads; set explicitly if desired
+# Global optimizer settings
+# Backends:
+#   :blackboxoptim -> Differential Evolution (:adaptive_de_rand_1_bin_radiuslimited)
+#   :nlopt        -> NLopt global algorithms (set `global_nlopt_algorithm`)
+global_optimizer = :blackboxoptim
+global_maxeval = 500_000                 # max objective evaluations in stage-1 global search
+global_population = 200                  # BlackBoxOptim DE population size
+global_nthreads = max(1, min(n_workers, Threads.nthreads())) # used by BlackBoxOptim DE
 global_trace_mode = :compact            # :silent, :compact, or :verbose
-global_trace_interval = 120.0            # seconds between DE progress lines
-n_local_restarts = 10                   # DE-seeded local starts: 1 DE best + (n_local_restarts-1) jittered
-local_jitter_scale = 0.2                # jitter multiplier on parameter span for DE-neighbor starts
-local_maxiters = 2_000                  # per-local-refinement max iterations
-# Available local optimizer symbols:
-# :nelder_mead (aliases: :neldermead, :nm), :lbfgs (alias: :l_bfgs), :bfgs,
-# :cg (alias: :conjugate_gradient)
-local_optimizer = :nelder_mead          # baseline local optimizer
+global_trace_interval = 120.0           # seconds between global progress lines
+# NLopt global algorithm options:
+# :gn_esch, :gn_crs2_lm, :gn_direct, :gn_direct_l, :gn_direct_noscal,
+# :gn_direct_l_noscal, :gn_direct_lr, :gn_direct_lr_noscal
+global_nlopt_algorithm = :gn_esch       # used only when global_optimizer = :nlopt
+global_nlopt_population = 0             # 0 = NLopt default; >0 sets population when supported
+
+# Local settings
+n_local_restarts = 10                   # global-seeded local starts: 1 global best + (n_local_restarts-1) jittered
+local_jitter_scale = 0.1                # jitter multiplier on parameter span for DE-neighbor starts
+local_maxiters = 1000                  # per-local-refinement max iterations
+# Available NLopt local optimizer symbols:
+# :bobyqa, :sbplx (alias: :subplex), :nelder_mead (aliases: :neldermead, :nm),
+# :cobyla, :newuoa, :praxis
+local_optimizer = :cobyqa               # baseline local optimizer
 local_show_trace = false
 
 # Sampling-stage settings (used only if run_sampling_stage=true).
 # This stage runs LOCAL-ONLY fitting per fixed-parameter sample, seeded from
 # the baseline best-fit parameters from stage 1.
-nsamp = 20                              # number of LHS fixed-parameter samples
+nsamp = 40                              # number of LHS fixed-parameter samples
 fixed_overrides = Dict("Emax_V" => 1.0) # forced fixed values for all samples
 sample_lower_factor = 0.5               # LHS lower multiplier for fixed-parameter sampling
 sample_upper_factor = 2.0               # LHS upper multiplier for fixed-parameter sampling
 sample_seed = 1234                      # reproducible sampling seed
 sampling_use_log_space = true           # local-only sampling fit in log space
-sampling_local_maxiters = 2_000         # sampling stage local optimizer iterations
-# Available local optimizer symbols:
-# :nelder_mead (aliases: :neldermead, :nm), :lbfgs (alias: :l_bfgs), :bfgs,
-# :cg (alias: :conjugate_gradient)
-sampling_local_optimizer = :nelder_mead # sampling stage optimizer
+sampling_local_maxiters = 2000         # sampling stage local optimizer iterations
+# Available NLopt local optimizer symbols:
+# :bobyqa, :sbplx (alias: :subplex), :nelder_mead (aliases: :neldermead, :nm),
+# :cobyla, :newuoa, :praxis
+sampling_local_optimizer = :cobyqa      # sampling stage optimizer
 sampling_local_show_trace = false
 
 # Output location.
@@ -116,11 +127,14 @@ settings = merge(
         user_fixed_params = user_fixed_params,
         solver_settings = solver_settings,
         use_log_space = use_log_space,
+        global_optimizer = global_optimizer,
         global_maxeval = global_maxeval,
         global_population = global_population,
         global_nthreads = global_nthreads,
         global_trace_mode = global_trace_mode,
         global_trace_interval = global_trace_interval,
+        global_nlopt_algorithm = global_nlopt_algorithm,
+        global_nlopt_population = global_nlopt_population,
         n_local_restarts = n_local_restarts,
         local_jitter_scale = local_jitter_scale,
         local_maxiters = local_maxiters,
