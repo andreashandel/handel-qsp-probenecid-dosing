@@ -80,13 +80,13 @@ end
 Build substitution dictionary for fixed parameters present in `ode`.
 """
 function si_fixed_parameter_substitutions(
-    ode,
+    ode::StructuralIdentifiability.ODE{P},
     fixedpars::Dict{String,Float64};
     extra_fixed::Dict{String,Float64} = Dict{String,Float64}(),
     tol::Float64 = 1e-12,
-)
+) where P
     lookup = si_parameter_lookup(ode)
-    subs = Dict{Any,Any}()
+    subs = Dict{P, Rational{Int64}}()
     used_names = String[]
 
     for (k, v) in fixedpars

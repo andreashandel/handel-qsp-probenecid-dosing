@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/handeladmin/.julia/**)",
+      "Bash(echo $HOME)"
+    ]
+  }
+}
