@@ -28,6 +28,7 @@ function default_plot_settings(model_choice::String = "model1")
         make_diagnostic_figures = true,
         make_dose_response_figures = true,
         make_parameter_tables = true,
+        topfit_n = 5,
         output_fig_dir = repo_path("results", "figures", "julia"),
         output_table_dir = repo_path("results", "tables"),
         dose_x_limits_baseline = (1e-2, 1e5),
@@ -36,6 +37,7 @@ function default_plot_settings(model_choice::String = "model1")
         dose_x_breaks = [1e-3, 1e-1, 1e1, 1e3],
         dose_y_limits = (0.0, 100.0),
         results_file = repo_path("results", "output", "$(model_choice)-dose-response-results.jld2"),
+        multistart_bestfit_file = repo_path("results", "output", "$(model_choice)-bestfit-multistart.jld2"),
         bestfit_file = repo_path("results", "output", "$(model_choice)-bestfit-sample.jld2"),
         fallback_bestfit_file = repo_path("results", "output", "$(model_choice)-bestfit-multistart.jld2"),
     )
@@ -406,6 +408,66 @@ function write_parameter_table_figure(bestfit::Dict{String,Any}, outfile::String
 end
 
 """
+Write a parameter table figure for the top-N multistart fits.
+
+Rows:
+- objective (top row)
+- each fitted parameter name
+
+Columns:
+- parameter
+- fit1 ... fitN (ordered best to worst by objective)
+"""
+function write_topfit_parameter_table_figure(bestfit_list, outfile::String; top_n::Int = 5)
+    bestfits = Vector{Dict{String,Any}}()
+    for item in bestfit_list
+        item isa AbstractDict || continue
+        push!(bestfits, Dict{String,Any}(String(k) => v for (k, v) in pairs(item)))
+    end
+    isempty(bestfits) && error("No bestfit objects available for top-fit parameter table.")
+
+    sort!(bestfits, by = bestfit_objective_or_inf)
+    nfits = min(max(1, Int(top_n)), length(bestfits))
+    topfits = bestfits[1:nfits]
+
+    fitpar_names = String.(topfits[1]["fitparnames"])
+    row_names = vcat(["objective"], fitpar_names)
+    nrows_tbl = length(row_names)
+
+    table_vals = Matrix{Float64}(undef, nrows_tbl, nfits)
+    for (j, bf) in enumerate(topfits)
+        fitpars = Dict{String,Float64}(String(k) => Float64(v) for (k, v) in pairs(bf["fitpars"]))
+        table_vals[1, j] = bestfit_objective_or_inf(bf)
+        for (i, pname) in enumerate(fitpar_names)
+            table_vals[i + 1, j] = get(fitpars, pname, NaN)
+        end
+    end
+
+    fig_w = max(900, 330 + 190 * nfits)
+    fig_h = max(320, 100 + 24 * (nrows_tbl + 2))
+    fig = Figure(size = (fig_w, fig_h))
+    gl = fig[1, 1] = GridLayout()
+
+    Label(gl[1, 1], "parameter", fontsize = 14, halign = :left)
+    for j in 1:nfits
+        Label(gl[1, j + 1], "fit$(j)", fontsize = 14, halign = :right)
+    end
+
+    for i in 1:nrows_tbl
+        Label(gl[i + 1, 1], row_names[i], fontsize = 12, halign = :left)
+        for j in 1:nfits
+            val = table_vals[i, j]
+            val_str = isfinite(val) ? @sprintf("%.6g", val) : "NA"
+            Label(gl[i + 1, j + 1], val_str, fontsize = 12, halign = :right)
+        end
+    end
+
+    colgap!(gl, 18)
+    rowgap!(gl, 5)
+    save(outfile, fig)
+end
+
+"""
 Top-level plotting workflow.
 """
 function run_plot_workflow(settings = default_plot_settings())
@@ -421,6 +483,7 @@ function run_plot_workflow(settings = default_plot_settings())
     results_obj = load_julia_object(settings.results_file)
     simres_list = results_obj["simres_list"]
     bestfit_list = load_julia_object(bestfit_path)
+    bestfit_list isa AbstractVector || error("Bestfit file must contain a vector of bestfit objects: $(bestfit_path)")
 
     nsamp = min(settings.nsamp, length(bestfit_list), length(simres_list))
     mkpath(settings.output_fig_dir)
@@ -513,6 +576,18 @@ function run_plot_workflow(settings = default_plot_settings())
                 bestfit_list[i],
                 joinpath(settings.output_fig_dir, "$(settings.model_choice)-parametertab$(i)-julia.png"),
             )
+        end
+
+        topfit_path = String(settings.multistart_bestfit_file)
+        if isfile(topfit_path)
+            topfit_list = load_julia_object(topfit_path)
+            write_topfit_parameter_table_figure(
+                topfit_list,
+                joinpath(settings.output_fig_dir, "$(settings.model_choice)-parametertab-top$(Int(settings.topfit_n))-julia.png");
+                top_n = Int(settings.topfit_n),
+            )
+        else
+            @warn "Top-fit parameter table skipped; multistart file not found." path = topfit_path
         end
     end
 

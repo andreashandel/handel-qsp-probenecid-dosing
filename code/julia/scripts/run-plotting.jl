@@ -21,7 +21,7 @@ import .HandelQSP
 # -----------------------------------------------------------------------------
 # User settings
 # -----------------------------------------------------------------------------
-model_choice = "model1"
+model_choice = "model2"
 nsamp = 1
 
 settings = merge(HandelQSP.default_plot_settings(model_choice), (nsamp = nsamp,))

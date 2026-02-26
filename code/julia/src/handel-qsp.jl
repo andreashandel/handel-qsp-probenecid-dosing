@@ -48,6 +48,7 @@ include("virus-transform-function.jl")
 include("data-and-config-function.jl")
 include("simulators-function.jl")
 include("objective-function.jl")
+include("structural-identifiability-workflow-function.jl")
 include("fit-workflow-function.jl")
 include("dose-predictions-function.jl")
 include("plot-workflow-function.jl")
@@ -55,6 +56,7 @@ include("plot-workflow-function.jl")
 export project_root
 export virus_quantity_name, transform_virus, inverse_transform_virus
 export load_fit_data, load_fixed_parameters, compute_sigma_settings, build_model_config
+export default_structural_identifiability_settings, run_structural_identifiability_workflow
 export default_fit_settings, run_fit_workflow
 export default_dose_prediction_settings, run_dose_prediction_workflow
 export default_plot_settings, run_plot_workflow

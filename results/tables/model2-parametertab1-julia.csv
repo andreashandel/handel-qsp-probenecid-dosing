@@ -1,0 +1,15 @@
+Parameter,Value,Label
+b,0.033415736575168775,Virus infection rate
+k,3.988806512229111e-5,Adaptive response clearance rate
+p,39487.279954741534,Virus production rate
+kF,0.10717011909136287,Innate response suppression strength
+cV,9.113943646631434,Virus removal rate
+gF,2.973531743120717,Maximum innate response induction
+hV,3.5652717539865737,Virus half-maximum innate activation
+Fmax,1.1856879983987152,Maximum innate response
+hF,0.0004981393273607632,Adaptive response half-maximum induction
+gS,0.6808313689633003,Symptom induction rate
+cS,1.0046191511807274e-5,Symptom decay rate
+Emax_F,0.9480505187933482,Maximum drug effect on innate response
+C50_F,1.0000000000000132e-17,Half maximum of innate response effect
+C50_V,1.0000000000000132e-17,Half maximum of virus suppression effect

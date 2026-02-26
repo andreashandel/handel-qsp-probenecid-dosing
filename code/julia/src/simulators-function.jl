@@ -170,7 +170,7 @@ function simulate_model2(allpars::Dict{String,Float64}; times::Vector{Float64}, 
 
     function rhs!(du, u, p, t)
         Ad, Ac, At, U, E, I, V, F, A, S = u
-        b = p["b"]; cE = p["cE"]; k = p["k"]; pV = p["p"]
+        b = p["b"]; cE = p["cE"]; cI = p["cI"]; k = p["k"]; pV = p["p"]
         kF = p["kF"]; cV = p["cV"]; gF = p["gF"]; hV = p["hV"]
         Fmax = p["Fmax"]; cF = p["cF"]; hF = p["hF"]; gA = p["gA"]
         gS = p["gS"]; cS = p["cS"]

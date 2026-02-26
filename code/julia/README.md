@@ -120,26 +120,14 @@ Each script keeps a **single user settings block** near the top. For fitting, `s
 - `verbose_fit_log` and `log_top_n` for runtime diagnostics
 
 Available local NLopt algorithms in `run-fit.jl`:
-- `:bobyqa`
-- `:sbplx` (alias `:subplex`)
-- `:nelder_mead` (aliases `:neldermead`, `:nm`)
-- `:cobyla`
-- `:newuoa`
-- `:praxis`
+- Use NLopt enum symbols directly, e.g. `:LN_BOBYQA`, `:LN_SBPLX`, `:LN_NELDERMEAD`, `:LN_COBYLA`, `:LN_NEWUOA`, `:LN_PRAXIS`
 
 Available global optimizer choices in `run-fit.jl`:
 - `global_optimizer = :blackboxoptim` (default DE backend)
 - `global_optimizer = :nlopt` (NLopt global backend)
 
 Available NLopt global algorithms in `run-fit.jl`:
-- `:gn_esch`
-- `:gn_crs2_lm`
-- `:gn_direct`
-- `:gn_direct_l`
-- `:gn_direct_noscal`
-- `:gn_direct_l_noscal`
-- `:gn_direct_lr`
-- `:gn_direct_lr_noscal`
+- Use NLopt enum symbols directly, e.g. `:GN_ESCH`, `:GN_CRS2_LM`, `:GN_DIRECT`, `:GN_DIRECT_L`, `:GN_DIRECT_NOSCAL`, `:GN_DIRECT_L_NOSCAL`, `:GN_DIRECT_L_RAND`, `:GN_DIRECT_L_RAND_NOSCAL`, `:GN_MLSL_LDS`, `:GN_ISRES`
 
 Parallel note:
 - `n_workers` is honored for threaded sampling-stage fitting (capped by available Julia threads).

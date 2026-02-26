@@ -20,6 +20,7 @@ Configuration strategy
 The script intentionally keeps all user-editable settings in one block below.
 If you are migrating from R, start by changing only:
 - `model_choice`
+- `run_multistart_stage`
 - `run_sampling_stage`
 - optimizer budgets (`global_maxeval`, `local_maxiters`)
 """
@@ -36,7 +37,13 @@ import .HandelQSP
 # User settings
 # -----------------------------------------------------------------------------
 model_choice = "model1"                 # "model1" or "model2"
-run_sampling_stage = false              # true = run fixed-parameter sampling stage
+
+# Stage toggles:
+# - run_multistart_stage = true,  run_sampling_stage = false -> multistart only
+# - run_multistart_stage = false, run_sampling_stage = true  -> sampling only
+# - run_multistart_stage = true,  run_sampling_stage = true  -> both
+run_multistart_stage = false
+run_sampling_stage = true
 
 # Parallelism / compute budget.
 # Note: Julia thread count is set at process launch via JULIA_NUM_THREADS.
@@ -67,30 +74,28 @@ solver_settings = (
 #   :blackboxoptim -> Differential Evolution (:adaptive_de_rand_1_bin_radiuslimited)
 #   :nlopt        -> NLopt global algorithms (set `global_nlopt_algorithm`)
 global_optimizer = :blackboxoptim
-global_maxeval = 500_000                 # max objective evaluations in stage-1 global search
+global_maxeval = 100_000                 # max objective evaluations in stage-1 global search
 global_population = 200                  # BlackBoxOptim DE population size
 global_nthreads = max(1, min(n_workers, Threads.nthreads())) # used by BlackBoxOptim DE
 global_trace_mode = :compact            # :silent, :compact, or :verbose
 global_trace_interval = 120.0           # seconds between global progress lines
 # NLopt global algorithm options:
-# :gn_esch, :gn_crs2_lm, :gn_direct, :gn_direct_l, :gn_direct_noscal,
-# :gn_direct_l_noscal, :gn_direct_lr, :gn_direct_lr_noscal
-global_nlopt_algorithm = :gn_esch       # used only when global_optimizer = :nlopt
-global_nlopt_population = 0             # 0 = NLopt default; >0 sets population when supported
+# use NLopt enum symbols directly (e.g. :GN_ESCH, :GN_MLSL_LDS, :GN_ISRES, :GN_DIRECT)
+global_nlopt_algorithm = :GN_ESCH       # used only when global_optimizer = :nlopt
+global_nlopt_population = 200             # 0 = NLopt default; >0 sets population when supported
 
 # Local settings
 n_local_restarts = 10                   # global-seeded local starts: 1 global best + (n_local_restarts-1) jittered
 local_jitter_scale = 0.1                # jitter multiplier on parameter span for DE-neighbor starts
-local_maxiters = 1000                  # per-local-refinement max iterations
+local_maxiters = 2000                  # per-local-refinement max iterations
 # Available NLopt local optimizer symbols:
-# :bobyqa, :sbplx (alias: :subplex), :nelder_mead (aliases: :neldermead, :nm),
-# :cobyla, :newuoa, :praxis
-local_optimizer = :cobyqa               # baseline local optimizer
+# use NLopt enum symbols directly (e.g. :LN_BOBYQA, :LN_SBPLX, :LN_NELDERMEAD, :LN_COBYLA)
+local_optimizer = :LN_COBYLA            # baseline local optimizer
 local_show_trace = false
 
 # Sampling-stage settings (used only if run_sampling_stage=true).
 # This stage runs LOCAL-ONLY fitting per fixed-parameter sample, seeded from
-# the baseline best-fit parameters from stage 1.
+# the best multistart fit (from this run or from saved multistart output).
 nsamp = 40                              # number of LHS fixed-parameter samples
 fixed_overrides = Dict("Emax_V" => 1.0) # forced fixed values for all samples
 sample_lower_factor = 0.5               # LHS lower multiplier for fixed-parameter sampling
@@ -99,9 +104,8 @@ sample_seed = 1234                      # reproducible sampling seed
 sampling_use_log_space = true           # local-only sampling fit in log space
 sampling_local_maxiters = 2000         # sampling stage local optimizer iterations
 # Available NLopt local optimizer symbols:
-# :bobyqa, :sbplx (alias: :subplex), :nelder_mead (aliases: :neldermead, :nm),
-# :cobyla, :newuoa, :praxis
-sampling_local_optimizer = :cobyqa      # sampling stage optimizer
+# use NLopt enum symbols directly (e.g. :LN_BOBYQA, :LN_SBPLX, :LN_NELDERMEAD, :LN_COBYLA)
+sampling_local_optimizer = :LN_COBYLA   # sampling stage optimizer
 sampling_local_show_trace = false
 
 # Output location.
@@ -115,6 +119,7 @@ settings = merge(
     HandelQSP.default_fit_settings(model_choice),
     (
         model_choice = model_choice,
+        run_multistart_stage = run_multistart_stage,
         run_sampling_stage = run_sampling_stage,
         n_workers = n_workers,
         verbose_fit_log = verbose_fit_log,

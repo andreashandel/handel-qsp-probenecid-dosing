@@ -2,15 +2,15 @@
 # run-fit.R
 # -----------------------------------------------------------------------------
 # PURPOSE
-#   Unified entry point for model fitting. This script ALWAYS runs the
-#   multi-start workflow first (global screening + local refinement). After
-#   that, it can optionally run a single-fit workflow that samples fixed
-#   parameters while seeding EVERY sample from the multistart bestfit.
+#   Unified entry point for model fitting. This script can run:
+#   1) multistart only (global screening + local refinement),
+#   2) fixed-parameter sampling only (seeded from a saved multistart bestfit),
+#   3) both stages in sequence.
 #
 # OUTPUTS (results/output/)
-#   Multistart stage (always):
+#   Multistart stage (if enabled):
 #     - <model>-bestfit-multistart.Rds
-#   Optional fixed-parameter sampling stage:
+#   Fixed-parameter sampling stage (if enabled):
 #     - <model>-bestfit-sample.Rds
 # -----------------------------------------------------------------------------
 #
@@ -19,10 +19,10 @@
 #     settings (multistart + optional sampling).
 #   - "Common setup": load data and model config, compute sigma settings, and
 #     prepare fixed parameters.
-#   - "Multistart stage": generate candidate starts, screen them, then refine,
-#     and save the multistart bestfits.
-#   - "Sampling stage (optional)": run single fits for fixed-parameter samples
-#     using the multistart bestfit as the starting point for every sample.
+#   - "Multistart stage (optional)": generate candidate starts, screen them,
+#     then refine, and save the multistart bestfits.
+#   - "Sampling stage (optional)": run single fits for fixed-parameter samples,
+#     seeded from the multistart bestfit.
 #   - "Save results": write RDS files and report elapsed time.
 # -----------------------------------------------------------------------------
 
@@ -52,10 +52,18 @@ source(here::here("code", "analysis-code", "functions", "fit-single-function.R")
 # -----------------------------------------------------------------------------
 # User settings (common to all stages)
 # -----------------------------------------------------------------------------
-model_choice <- "model1" # "model1" or "model2".
+model_choice <- "model2" # "model1" or "model2".
 
-# If FALSE, only the multistart stage is run (no fixed-parameter sampling).
-run_sampling_stage <- TRUE
+# Stage toggles:
+#   - run_multistart_stage = TRUE,  run_sampling_stage = FALSE -> multistart only
+#   - run_multistart_stage = FALSE, run_sampling_stage = TRUE  -> sampling only
+#   - run_multistart_stage = TRUE,  run_sampling_stage = TRUE  -> both
+run_multistart_stage <- TRUE
+run_sampling_stage <- FALSE
+
+if (!isTRUE(run_multistart_stage) && !isTRUE(run_sampling_stage)) {
+  stop("At least one stage must be enabled: run_multistart_stage or run_sampling_stage.")
+}
 
 # Parallel workers for all stages.
 #   - NULL = let each stage choose a sensible default based on available cores.
@@ -172,7 +180,7 @@ n_refine <- 40
 #   - "mixed": always include the best candidate, then select a mix of the
 #     next-best and random candidates. mix_best_n controls how many of the
 #     remaining slots are filled by the next-best candidates (NULL = all).
-refine_selection_mode <- "mixed" # "best", "random", or "mixed"
+refine_selection_mode <- "best" # "best", "random", or "mixed"
 mix_best_n <- 10
 
 # Stage 2 optimizers.
@@ -334,7 +342,7 @@ par_ini_full <- handle_oob_initials(par_ini_full, lb, ub, "Baseline")
 # -----------------------------------------------------------------------------
 # Multistart stage (global screening + local refinement)
 # -----------------------------------------------------------------------------
-{
+if (isTRUE(run_multistart_stage)) {
   if (seed_mode == "fixed") {
     set.seed(seed_value)
   } else if (seed_mode == "time") {
@@ -728,13 +736,15 @@ par_ini_full <- handle_oob_initials(par_ini_full, lb, ub, "Baseline")
   bestfits_to_save <- lapply(bestfits, strip_bestfit)
   saveRDS(bestfits_to_save, output_file)
   message("Saved all refined fits to: ", output_file)
+} else {
+  message("Multistart stage disabled.")
 }
 
 # -----------------------------------------------------------------------------
 # Optional sampling stage (single-fit workflow for fixed-parameter samples)
 # -----------------------------------------------------------------------------
 if (isTRUE(run_sampling_stage)) {
-  message(sprintf("Starting stage 3 at time %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+  message(sprintf("Starting sampling stage at time %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
   # Build the list of fixed-parameter sets to evaluate.
   #   - The first element is always the baseline fixed-parameter set.
   #   - The remaining nsamp elements are random perturbations around baseline.
@@ -759,11 +769,12 @@ if (isTRUE(run_sampling_stage)) {
   )
 
   # Load the multistart bestfit; this is the starting point for EVERY sample.
+  # In sampling-only mode, this must come from a previous run.
   if (!file.exists(multistart_path)) {
     stop(
       "Multistart bestfit file not found at ",
       multistart_path,
-      ". Run the multistart stage first."
+      ". Run with run_multistart_stage = TRUE at least once first."
     )
   }
 
@@ -868,9 +879,9 @@ if (isTRUE(run_sampling_stage)) {
   saveRDS(bestfit_all, sample_bestfit_path)
 
   message("Saved sample bestfit list to: ", sample_bestfit_path)
-  message(sprintf("Ending stage 3 at time %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
+  message(sprintf("Ending sampling stage at time %s", format(Sys.time(), "%Y-%m-%d %H:%M:%S")))
 } else {
-  message("Sampling stage disabled; only multistart fit was run.")
+  message("Sampling stage disabled.")
 }
 
 # -----------------------------------------------------------------------------

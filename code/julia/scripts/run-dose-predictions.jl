@@ -27,7 +27,7 @@ import .HandelQSP
 # -----------------------------------------------------------------------------
 # User settings
 # -----------------------------------------------------------------------------
-model_choice = "model1"
+model_choice = "model2"
 
 settings = HandelQSP.default_dose_prediction_settings(model_choice)
 HandelQSP.run_dose_prediction_workflow(settings)

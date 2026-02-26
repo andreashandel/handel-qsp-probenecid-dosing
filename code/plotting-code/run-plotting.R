@@ -40,7 +40,7 @@ source(here::here("code", "plotting-code", "functions", "plotting-config-functio
 # -----------------------------------------------------------------------------
 # User settings
 # -----------------------------------------------------------------------------
-model_choice <- "model1" # "model1" or "model2"
+model_choice <- "model2" # "model1" or "model2"
 nsamp <- 1               # How many samples to plot (1 = baseline only)
 
 # Toggle outputs
@@ -105,6 +105,62 @@ dir.create(fig_dir, showWarnings = FALSE, recursive = TRUE)
 dir.create(table_dir, showWarnings = FALSE, recursive = TRUE)
 
 config <- get_plotting_config()
+
+# -----------------------------------------------------------------------------
+# Helpers for bestfit objective sorting and top-fit parameter tables
+# -----------------------------------------------------------------------------
+bestfit_objective_or_inf <- function(bestfit) {
+  obj <- suppressWarnings(as.numeric(bestfit$objective))
+  if (length(obj) == 1 && is.finite(obj)) {
+    return(obj)
+  }
+  Inf
+}
+
+build_topfit_parameter_table <- function(bestfit_list, top_n = 5) {
+  if (!is.list(bestfit_list) || length(bestfit_list) == 0) {
+    stop("Top-fit table requires a non-empty bestfit list.")
+  }
+
+  objectives <- vapply(bestfit_list, bestfit_objective_or_inf, numeric(1))
+  order_idx <- order(objectives)
+  n_keep <- min(top_n, length(order_idx))
+  keep_idx <- order_idx[seq_len(n_keep)]
+  topfits <- bestfit_list[keep_idx]
+
+  # Use the parameter order from the best model for row order consistency.
+  parnames <- topfits[[1]]$fitparnames
+  if (is.null(parnames) || !length(parnames)) {
+    parnames <- names(topfits[[1]]$fitpars)
+  }
+  if (is.null(parnames) || !length(parnames)) {
+    stop("Could not determine parameter names for top-fit table.")
+  }
+
+  out <- data.frame(
+    parameter = c("objective", parnames),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+
+  for (j in seq_along(topfits)) {
+    bf <- topfits[[j]]
+    fitpars <- bf$fitpars
+
+    # Ensure name lookup works even if fitpars were saved without names.
+    if (is.null(names(fitpars)) && !is.null(bf$fitparnames) && length(fitpars) == length(bf$fitparnames)) {
+      names(fitpars) <- bf$fitparnames
+    }
+
+    obj <- bestfit_objective_or_inf(bf)
+    vals <- suppressWarnings(as.numeric(fitpars[parnames]))
+
+    # Keep objective in top row, then one row per parameter.
+    out[[paste0("fit", j)]] <- c(obj, vals)
+  }
+
+  out
+}
 
 # -----------------------------------------------------------------------------
 # Time-series figures
@@ -274,6 +330,33 @@ if (make_parameter_tables) {
       data = gttab,
       filename = here::here(fig_dir, paste0(model_choice, "-parametertab", i, ".png"))
     )
+  }
+
+  # Top-5 parameter table from multistart fits (best to worst by objective).
+  multistart_file <- here::here("results", "output", paste0(model_choice, "-bestfit-multistart.Rds"))
+  if (file.exists(multistart_file)) {
+    multistart_bestfits <- readRDS(multistart_file)
+    topfit_tab <- build_topfit_parameter_table(multistart_bestfits, top_n = 5)
+
+    topfit_gttab <- gt(topfit_tab) %>%
+      cols_label(parameter = "Parameter")
+
+    saveRDS(
+      topfit_gttab,
+      file = here::here(table_dir, paste0(model_choice, "-parametertab-top5.rds"))
+    )
+    write.csv(
+      topfit_tab,
+      file = here::here(table_dir, paste0(model_choice, "-parametertab-top5.csv")),
+      row.names = FALSE
+    )
+
+    gt::gtsave(
+      data = topfit_gttab,
+      filename = here::here(fig_dir, paste0(model_choice, "-parametertab-top5.png"))
+    )
+  } else {
+    warning("Multistart file not found; skipping top-5 parameter table: ", multistart_file)
   }
 }
 
